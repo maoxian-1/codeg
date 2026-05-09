@@ -1,0 +1,138 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_server:
+        description: "Also build server binary"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  RUST_BACKTRACE: short
+  HUSKY: 0
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-tauri-windows:
+    name: Build Windows x64 (Tauri)
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          shared-key: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: __build-windows__
+          releaseName: "Windows Build"
+          releaseBody: "Windows x64 build from ${{ github.ref_name }}"
+          releaseDraft: true
+          tauriScript: pnpm tauri
+          args: --target x86_64-pc-windows-msvc
+          includeUpdaterJson: false
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-artifacts
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 7
+
+  build-server-windows:
+    if: ${{ inputs.build_server == 'true' }}
+    name: Build Windows x64 (Server)
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          shared-key: server-x86_64-pc-windows-msvc
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Build frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build server binary
+        working-directory: src-tauri
+        run: cargo build --release --bin codeg-server --no-default-features --target x86_64-pc-windows-msvc
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/codeg-server-windows-x64
+          Copy-Item src-tauri/target/x86_64-pc-windows-msvc/release/codeg-server.exe dist/codeg-server-windows-x64/
+          Copy-Item -Recurse out dist/codeg-server-windows-x64/web
+          Compress-Archive -Path dist/codeg-server-windows-x64 -DestinationPath dist/codeg-server-windows-x64.zip
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-server
+          path: dist/codeg-server-windows-x64.zip
+          retention-days: 7
