@@ -80,6 +80,7 @@ pub fn all_acp_agents() -> Vec<AgentType> {
         AgentType::OpenClaw,
         AgentType::OpenCode,
         AgentType::Cline,
+        AgentType::KimiCli,
     ]
 }
 
@@ -91,6 +92,7 @@ pub fn registry_id_for(agent_type: AgentType) -> &'static str {
         AgentType::OpenClaw => "openclaw-acp",
         AgentType::OpenCode => "opencode",
         AgentType::Cline => "cline",
+        AgentType::KimiCli => "kimi-cli",
     }
 }
 
@@ -102,6 +104,7 @@ pub fn from_registry_id(id: &str) -> Option<AgentType> {
         "openclaw-acp" => Some(AgentType::OpenClaw),
         "opencode" => Some(AgentType::OpenCode),
         "cline" => Some(AgentType::Cline),
+        "kimi-cli" => Some(AgentType::KimiCli),
         _ => None,
     }
 }
@@ -234,6 +237,39 @@ pub fn get_agent_meta(agent_type: AgentType) -> AcpAgentMeta {
                     PlatformBinary {
                         platform: "windows-x86_64",
                         url: "https://github.com/anomalyco/opencode/releases/download/v1.14.41/opencode-windows-x64.zip",
+                    },
+                ],
+            },
+        },
+        AgentType::KimiCli => AcpAgentMeta {
+            agent_type,
+            name: "Kimi CLI",
+            description: "Moonshot AI's coding agent CLI",
+            distribution: AgentDistribution::Binary {
+                version: "1.41.0",
+                cmd: "kimi",
+                args: &["acp"],
+                env: &[],
+                platforms: &[
+                    PlatformBinary {
+                        platform: "darwin-aarch64",
+                        url: "https://ghproxy.net/https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-apple-darwin.tar.gz",
+                    },
+                    PlatformBinary {
+                        platform: "linux-aarch64",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-unknown-linux-gnu.tar.gz",
+                    },
+                    PlatformBinary {
+                        platform: "linux-x86_64",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-x86_64-unknown-linux-gnu.tar.gz",
+                    },
+                    PlatformBinary {
+                        platform: "windows-aarch64",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-pc-windows-msvc.zip",
+                    },
+                    PlatformBinary {
+                        platform: "windows-x86_64",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-x86_64-pc-windows-msvc.zip",
                     },
                 ],
             },

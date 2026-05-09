@@ -527,7 +527,8 @@
       "deleting": "削除中...",
       "confirmDelete": "削除を確認",
       "confirmUninstall": "アンインストールを確認",
-      "saveClineConfig": "Cline設定を保存"
+      "saveClineConfig": "Cline設定を保存",
+      "saveKimiConfig": "Kimi設定を保存"
     },
     "status": {
       "enabled": "有効",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "設定管理の保存に失敗しました",
       "clineSaved": "Cline設定を保存しました",
       "saveClineFailed": "Cline設定の保存に失敗しました",
+      "kimiSaved": "Kimi設定を保存しました",
+      "saveKimiFailed": "Kimi設定の保存に失敗しました",
       "modelProviderRequired": "保存する前にモデルプロバイダーを選択してください。"
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "Cline API プロバイダーと認証情報を設定します。設定は ~/.cline/data/ に保存されます。"
+    },
+    "kimi": {
+      "configTitle": "Kimi CLI 設定",
+      "configDescription": "Kimi CLI API 認証情報を設定します。設定は環境変数として保存されます。",
+      "baseUrlHint": "デフォルトのKimi APIエンドポイントを使用する場合は空欄のままにしてください。"
     },
     "opencodePlugins": {
       "title": "OpenCode プラグイン",

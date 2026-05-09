@@ -51,6 +51,50 @@ const CodexColorIcon = memo(function CodexColorIcon({
   )
 })
 
+const KimiIcon = memo(function KimiIcon({
+  size = "1em",
+}: {
+  size?: string | number
+}) {
+  return (
+    <svg
+      height={size}
+      style={{ flex: "none", lineHeight: 1 }}
+      viewBox="0 0 24 24"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>Kimi</title>
+      <rect
+        x="3"
+        y="4.5"
+        width="18"
+        height="13"
+        rx="2.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <rect
+        x="9.6"
+        y="8"
+        width="1.4"
+        height="2.6"
+        rx="0.45"
+        fill="currentColor"
+      />
+      <rect
+        x="15.6"
+        y="8"
+        width="1.4"
+        height="2.6"
+        rx="0.45"
+        fill="currentColor"
+      />
+    </svg>
+  )
+})
+
 // @lobehub/icons mislabels ClaudeCode's <title> as "Antigravity", which leaks
 // out as a browser tooltip on hover. Render the same artwork locally so we
 // control the title.
@@ -91,6 +135,7 @@ const COLOR_ICONS: Partial<Record<AgentType, AnyIcon>> = {
 const MONO_ICONS: Partial<Record<AgentType, AnyIcon>> = {
   open_code: OpenCode,
   cline: Cline,
+  kimi_cli: KimiIcon,
 }
 
 // Text-color versions for Mono icons

@@ -527,7 +527,8 @@
       "deleting": "Suppression...",
       "confirmDelete": "Confirmer la suppression",
       "confirmUninstall": "Confirmer la désinstallation",
-      "saveClineConfig": "Enregistrer la configuration Cline"
+      "saveClineConfig": "Enregistrer la configuration Cline",
+      "saveKimiConfig": "Enregistrer la configuration Kimi"
     },
     "status": {
       "enabled": "Activé",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "Échec de l’enregistrement de la gestion de configuration",
       "clineSaved": "Configuration Cline enregistrée",
       "saveClineFailed": "Échec de l'enregistrement de la configuration Cline",
+      "kimiSaved": "Configuration Kimi enregistrée",
+      "saveKimiFailed": "Échec de l'enregistrement de la configuration Kimi",
       "modelProviderRequired": "Veuillez sélectionner un fournisseur de modèle avant d'enregistrer."
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "Configurez le fournisseur API et les identifiants Cline. Les paramètres sont enregistrés dans ~/.cline/data/."
+    },
+    "kimi": {
+      "configTitle": "Configuration Kimi CLI",
+      "configDescription": "Configurez les identifiants de l'API Kimi CLI. Les paramètres sont enregistrés en tant que variables d'environnement.",
+      "baseUrlHint": "Laissez vide pour utiliser le point de terminaison API Kimi par défaut."
     },
     "opencodePlugins": {
       "title": "Plugins OpenCode",

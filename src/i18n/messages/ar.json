@@ -527,7 +527,8 @@
       "deleting": "جارٍ الحذف...",
       "confirmDelete": "تأكيد الحذف",
       "confirmUninstall": "تأكيد إزالة التثبيت",
-      "saveClineConfig": "حفظ تكوين Cline"
+      "saveClineConfig": "حفظ تكوين Cline",
+      "saveKimiConfig": "حفظ تكوين Kimi"
     },
     "status": {
       "enabled": "مفعّل",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "فشل حفظ إدارة الإعدادات",
       "clineSaved": "تم حفظ تكوين Cline",
       "saveClineFailed": "فشل في حفظ تكوين Cline",
+      "kimiSaved": "تم حفظ تكوين Kimi",
+      "saveKimiFailed": "فشل في حفظ تكوين Kimi",
       "modelProviderRequired": "يرجى اختيار مزود نموذج قبل الحفظ."
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "تكوين مزود واجهة برمجة التطبيقات وبيانات اعتماد Cline. يتم حفظ الإعدادات في ~/.cline/data/."
+    },
+    "kimi": {
+      "configTitle": "تكوين Kimi CLI",
+      "configDescription": "تكوين بيانات اعتماد واجهة برمجة تطبيقات Kimi CLI. يتم حفظ الإعدادات كمتغيرات بيئة.",
+      "baseUrlHint": "اتركه فارغًا لاستخدام نقطة نهاية واجهة برمجة تطبيقات Kimi الافتراضية."
     },
     "opencodePlugins": {
       "title": "إضافات OpenCode",

@@ -1579,6 +1579,11 @@ pub(crate) fn skill_storage_spec(agent_type: AgentType) -> Option<SkillStorageSp
                 ".claude/skills",
             ],
         }),
+        AgentType::KimiCli => Some(SkillStorageSpec {
+            kind: SkillStorageKind::SkillDirectoryOnly,
+            global_dirs: vec![home_dir_or_default().join(".kimi").join("skills")],
+            project_rel_dirs: vec![".agents/skills"],
+        }),
     }
 }
 
@@ -1895,6 +1900,7 @@ fn agent_env_keys(agent_type: AgentType) -> (&'static str, &'static str, &'stati
             "ANTHROPIC_MODEL",
         ),
         AgentType::Gemini => ("GOOGLE_GEMINI_BASE_URL", "GEMINI_API_KEY", "GEMINI_MODEL"),
+        AgentType::KimiCli => ("KIMI_BASE_URL", "KIMI_API_KEY", "KIMI_MODEL_NAME"),
         _ => ("OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL"),
     }
 }
@@ -2070,6 +2076,10 @@ fn cascade_update_agent_config(
             persist_agent_local_config_json(agent_type, Some(&patch_str))?;
         }
         AgentType::Cline => {}
+        AgentType::KimiCli => {
+            // Kimi CLI uses its own config mechanism via ~/.kimi/config.toml
+            // No additional config cascade needed
+        }
     }
     Ok(())
 }

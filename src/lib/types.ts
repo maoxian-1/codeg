@@ -5,6 +5,7 @@ export type AgentType =
   | "gemini"
   | "open_claw"
   | "cline"
+  | "kimi_cli"
 
 export type AppErrorCode =
   | "invalid_input"
@@ -239,6 +240,7 @@ export const AGENT_DISPLAY_ORDER: AgentType[] = [
   "gemini",
   "open_claw",
   "cline",
+  "kimi_cli",
 ]
 
 const AGENT_DISPLAY_ORDER_INDEX = new Map(
@@ -258,6 +260,7 @@ export const ALL_AGENT_TYPES: AgentType[] = [
   "gemini",
   "open_claw",
   "cline",
+  "kimi_cli",
 ]
 
 export const MODEL_PROVIDER_AGENT_TYPES: AgentType[] = [
@@ -273,6 +276,7 @@ export const AGENT_LABELS: Record<AgentType, string> = {
   gemini: "Gemini CLI",
   open_claw: "OpenClaw",
   cline: "Cline",
+  kimi_cli: "Kimi CLI",
 }
 
 export const AGENT_COLORS: Record<AgentType, string> = {
@@ -282,6 +286,7 @@ export const AGENT_COLORS: Record<AgentType, string> = {
   gemini: "bg-[#3186FF]",
   open_claw: "bg-emerald-600",
   cline: "bg-purple-500",
+  kimi_cli: "bg-[#6B5CE7]",
 }
 
 // ACP connection status (matches Rust ConnectionStatus)

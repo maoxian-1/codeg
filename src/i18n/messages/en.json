@@ -527,7 +527,8 @@
       "deleting": "Deleting...",
       "confirmDelete": "Confirm Delete",
       "confirmUninstall": "Confirm Uninstall",
-      "saveClineConfig": "Save Cline Config"
+      "saveClineConfig": "Save Cline Config",
+      "saveKimiConfig": "Save Kimi Config"
     },
     "status": {
       "enabled": "Enabled",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "Failed to save config management",
       "clineSaved": "Cline config saved",
       "saveClineFailed": "Failed to save Cline config",
+      "kimiSaved": "Kimi config saved",
+      "saveKimiFailed": "Failed to save Kimi config",
       "modelProviderRequired": "Please select a model provider before saving."
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "Configure Cline API provider and credentials. Settings are saved to ~/.cline/data/."
+    },
+    "kimi": {
+      "configTitle": "Kimi CLI Config",
+      "configDescription": "Configure Kimi CLI API credentials. Settings are saved as environment variables.",
+      "baseUrlHint": "Leave empty to use the default Kimi API endpoint."
     },
     "opencodePlugins": {
       "title": "OpenCode Plugins",

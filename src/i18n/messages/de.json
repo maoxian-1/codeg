@@ -527,7 +527,8 @@
       "deleting": "Löschen...",
       "confirmDelete": "Löschen bestätigen",
       "confirmUninstall": "Deinstallation bestätigen",
-      "saveClineConfig": "Cline-Konfiguration speichern"
+      "saveClineConfig": "Cline-Konfiguration speichern",
+      "saveKimiConfig": "Kimi-Konfiguration speichern"
     },
     "status": {
       "enabled": "Aktiviert",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "Speichern der Konfigurationsverwaltung fehlgeschlagen",
       "clineSaved": "Cline-Konfiguration gespeichert",
       "saveClineFailed": "Cline-Konfiguration konnte nicht gespeichert werden",
+      "kimiSaved": "Kimi-Konfiguration gespeichert",
+      "saveKimiFailed": "Kimi-Konfiguration konnte nicht gespeichert werden",
       "modelProviderRequired": "Bitte wählen Sie vor dem Speichern einen Modellanbieter aus."
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "Konfigurieren Sie den Cline API-Anbieter und die Anmeldedaten. Einstellungen werden in ~/.cline/data/ gespeichert."
+    },
+    "kimi": {
+      "configTitle": "Kimi CLI Konfiguration",
+      "configDescription": "Konfigurieren Sie die Kimi CLI API-Zugangsdaten. Einstellungen werden als Umgebungsvariablen gespeichert.",
+      "baseUrlHint": "Leer lassen, um den Standard-Kimi-API-Endpunkt zu verwenden."
     },
     "opencodePlugins": {
       "title": "OpenCode-Plugins",

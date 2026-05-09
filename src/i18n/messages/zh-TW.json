@@ -527,7 +527,8 @@
       "deleting": "刪除中...",
       "confirmDelete": "確認刪除",
       "confirmUninstall": "確認卸載",
-      "saveClineConfig": "儲存 Cline 配置"
+      "saveClineConfig": "儲存 Cline 配置",
+      "saveKimiConfig": "儲存 Kimi 配置"
     },
     "status": {
       "enabled": "啟用",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "儲存配置管理失敗",
       "clineSaved": "Cline 配置已儲存",
       "saveClineFailed": "儲存 Cline 配置失敗",
+      "kimiSaved": "Kimi 配置已儲存",
+      "saveKimiFailed": "儲存 Kimi 配置失敗",
       "modelProviderRequired": "請先選擇一個模型供應商再儲存。"
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "配置 Cline API 提供商和憑證。設定將儲存到 ~/.cline/data/。"
+    },
+    "kimi": {
+      "configTitle": "Kimi CLI 配置",
+      "configDescription": "配置 Kimi CLI API 憑證。設定將儲存為環境變數。",
+      "baseUrlHint": "留空以使用預設的 Kimi API 端點。"
     },
     "opencodePlugins": {
       "title": "OpenCode 外掛",

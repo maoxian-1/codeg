@@ -527,7 +527,8 @@
       "deleting": "삭제 중...",
       "confirmDelete": "삭제 확인",
       "confirmUninstall": "제거 확인",
-      "saveClineConfig": "Cline 설정 저장"
+      "saveClineConfig": "Cline 설정 저장",
+      "saveKimiConfig": "Kimi 설정 저장"
     },
     "status": {
       "enabled": "활성화됨",
@@ -700,6 +701,8 @@
       "saveConfigManagementFailed": "구성 관리 저장 실패",
       "clineSaved": "Cline 설정 저장됨",
       "saveClineFailed": "Cline 설정 저장 실패",
+      "kimiSaved": "Kimi 설정이 저장되었습니다",
+      "saveKimiFailed": "Kimi 설정 저장에 실패했습니다",
       "modelProviderRequired": "저장하기 전에 모델 공급자를 선택하세요."
     },
     "version": {
@@ -715,6 +718,11 @@
     },
     "cline": {
       "configDescription": "Cline API 제공자와 자격 증명을 구성합니다. 설정은 ~/.cline/data/에 저장됩니다."
+    },
+    "kimi": {
+      "configTitle": "Kimi CLI 설정",
+      "configDescription": "Kimi CLI API 자격 증명을 구성합니다. 설정은 환경 변수로 저장됩니다.",
+      "baseUrlHint": "기본 Kimi API 엔드포인트를 사용하려면 비워두세요."
     },
     "opencodePlugins": {
       "title": "OpenCode 플러그인",

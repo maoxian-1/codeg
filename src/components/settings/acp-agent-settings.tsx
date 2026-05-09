@@ -142,6 +142,9 @@ interface AgentDraft {
   clineApiKey: string
   clineModel: string
   clineBaseUrl: string
+  kimiApiKey: string
+  kimiBaseUrl: string
+  kimiModel: string
 }
 
 type RunningActionKind =
@@ -307,6 +310,12 @@ const OPENCLAW_ENV_KEYS = {
   gatewayUrl: "OPENCLAW_GATEWAY_URL",
   gatewayToken: "OPENCLAW_GATEWAY_TOKEN",
   sessionKey: "OPENCLAW_SESSION_KEY",
+} as const
+
+const KIMI_ENV_KEYS = {
+  apiKey: "KIMI_API_KEY",
+  baseUrl: "KIMI_BASE_URL",
+  model: "KIMI_MODEL_NAME",
 } as const
 
 const CLINE_PROVIDERS = [
@@ -677,6 +686,22 @@ function extractOpenClawImportantValues(
     gatewayUrl: findEnvValue(mergedEnv, [OPENCLAW_ENV_KEYS.gatewayUrl]),
     gatewayToken: findEnvValue(mergedEnv, [OPENCLAW_ENV_KEYS.gatewayToken]),
     sessionKey: findEnvValue(mergedEnv, [OPENCLAW_ENV_KEYS.sessionKey]),
+  }
+}
+
+interface KimiImportantValues {
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
+function extractKimiImportantValues(
+  env: Record<string, string>
+): KimiImportantValues {
+  return {
+    apiKey: findEnvValue(env, [KIMI_ENV_KEYS.apiKey]),
+    baseUrl: findEnvValue(env, [KIMI_ENV_KEYS.baseUrl]),
+    model: findEnvValue(env, [KIMI_ENV_KEYS.model]),
   }
 }
 
@@ -2324,6 +2349,7 @@ function buildAgentDraft(agent: AcpAgentInfo): AgentDraft {
     openCodeAuthJsonText
   )
   const clineImportant = extractClineImportantValues(configText)
+  const kimiImportant = extractKimiImportantValues(agent.env)
   const codexAuthMode: CodexAuthMode =
     agent.agent_type === "codex" && agent.model_provider_id != null
       ? "model_provider"
@@ -2403,6 +2429,9 @@ function buildAgentDraft(agent: AcpAgentInfo): AgentDraft {
     clineApiKey: clineImportant.apiKey,
     clineModel: clineImportant.model,
     clineBaseUrl: clineImportant.baseUrl,
+    kimiApiKey: kimiImportant.apiKey,
+    kimiBaseUrl: kimiImportant.baseUrl,
+    kimiModel: kimiImportant.model,
   }
 }
 
@@ -4085,6 +4114,32 @@ export function AcpAgentSettings() {
         openClawGatewayUrl: OPENCLAW_ENV_KEYS.gatewayUrl,
         openClawGatewayToken: OPENCLAW_ENV_KEYS.gatewayToken,
         openClawSessionKey: OPENCLAW_ENV_KEYS.sessionKey,
+      }
+
+      updateSelectedDraft((current) => ({
+        ...current,
+        [key]: value,
+        envText: patchEnvText(current.envText, {
+          [envKeyMap[key]]: value,
+        }),
+      }))
+    },
+    [selectedAgent, selectedDraft, updateSelectedDraft]
+  )
+
+  const handleKimiFieldChange = useCallback(
+    (key: "kimiApiKey" | "kimiBaseUrl" | "kimiModel", value: string) => {
+      if (
+        !selectedAgent ||
+        !selectedDraft ||
+        selectedAgent.agent_type !== "kimi_cli"
+      )
+        return
+
+      const envKeyMap: Record<string, string> = {
+        kimiApiKey: KIMI_ENV_KEYS.apiKey,
+        kimiBaseUrl: KIMI_ENV_KEYS.baseUrl,
+        kimiModel: KIMI_ENV_KEYS.model,
       }
 
       updateSelectedDraft((current) => ({
@@ -7171,6 +7226,137 @@ supports_websockets = true`}
                           <>
                             <Save className="h-3.5 w-3.5" />
                             {t("actions.saveOpenClawConfig")}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : selectedAgent.agent_type === "kimi_cli" ? (
+                  <div className="space-y-3 rounded-md border bg-muted/10 p-3">
+                    <div>
+                      <label className="text-xs font-medium">
+                        {t("kimi.configTitle")}
+                      </label>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {t("kimi.configDescription")}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] text-muted-foreground">
+                        API Key
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type={
+                            showApiKeys[selectedAgent.agent_type]
+                              ? "text"
+                              : "password"
+                          }
+                          value={selectedDraft.kimiApiKey}
+                          onChange={(event) => {
+                            handleKimiFieldChange(
+                              "kimiApiKey",
+                              event.target.value
+                            )
+                          }}
+                          placeholder="sk-..."
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowApiKeys((prev) => ({
+                              ...prev,
+                              [selectedAgent.agent_type]:
+                                !prev[selectedAgent.agent_type],
+                            }))
+                          }}
+                          title={
+                            showApiKeys[selectedAgent.agent_type]
+                              ? t("actions.hideApiKey")
+                              : t("actions.showApiKey")
+                          }
+                        >
+                          {showApiKeys[selectedAgent.agent_type] ? (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] text-muted-foreground">
+                        Model
+                      </label>
+                      <Input
+                        value={selectedDraft.kimiModel}
+                        onChange={(event) => {
+                          handleKimiFieldChange("kimiModel", event.target.value)
+                        }}
+                        placeholder="kimi-for-coding"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] text-muted-foreground">
+                        Base URL
+                      </label>
+                      <Input
+                        value={selectedDraft.kimiBaseUrl}
+                        onChange={(event) => {
+                          handleKimiFieldChange(
+                            "kimiBaseUrl",
+                            event.target.value
+                          )
+                        }}
+                        placeholder="https://api.kimi.com/coding/v1"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("kimi.baseUrlHint")}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          persistEnv(
+                            selectedAgent.agent_type,
+                            selectedDraft.enabled,
+                            selectedDraft.envText,
+                            selectedDraft.modelProviderId
+                          )
+                            .then(() => {
+                              toast.success(t("toasts.kimiSaved"), {
+                                description: t("toasts.configSavedHint"),
+                              })
+                            })
+                            .catch((err) => {
+                              console.error(
+                                "[Settings] save kimi config failed:",
+                                err
+                              )
+                              const message = toErrorMessage(err)
+                              toast.error(t("toasts.saveKimiFailed"), {
+                                description: message,
+                              })
+                            })
+                        }}
+                        disabled={selectedIsSavingEnv}
+                      >
+                        {selectedIsSavingEnv ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {t("actions.saving")}
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-3.5 w-3.5" />
+                            {t("actions.saveKimiConfig")}
                           </>
                         )}
                       </Button>

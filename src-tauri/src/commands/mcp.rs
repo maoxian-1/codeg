@@ -1953,6 +1953,37 @@ fn remove_openclaw_server(id: &str) -> Result<bool, AppCommandError> {
 }
 
 // ---------------------------------------------------------------------------
+// Kimi CLI  (~/.kimi/mcp.json  →  mcpServers)
+// ---------------------------------------------------------------------------
+
+fn kimi_config_path() -> PathBuf {
+    home_dir_or_default().join(".kimi").join("mcp.json")
+}
+
+fn read_kimi_servers() -> Result<BTreeMap<String, Value>, AppCommandError> {
+    let path = kimi_config_path();
+    let root = read_json_file(&path)?;
+    let mut out = BTreeMap::new();
+
+    let Some(servers) = root.get("mcpServers").and_then(Value::as_object) else {
+        return Ok(out);
+    };
+
+    for (id, spec) in servers {
+        match canonicalize_spec(spec, "Kimi config") {
+            Ok(normalized) => {
+                out.insert(id.to_string(), normalized);
+            }
+            Err(err) => {
+                eprintln!("[MCP] skip invalid Kimi MCP entry id={id}: {err}");
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------
 // Cline  (~/.cline/data/settings/cline_mcp_settings.json  →  mcpServers)
 // ---------------------------------------------------------------------------
 
@@ -2109,6 +2140,7 @@ pub fn read_servers_for_agent_type(
         AgentType::Gemini => read_gemini_servers(),
         AgentType::OpenClaw => read_openclaw_servers(),
         AgentType::Cline => read_cline_servers(),
+        AgentType::KimiCli => read_kimi_servers(),
     }
 }
 
