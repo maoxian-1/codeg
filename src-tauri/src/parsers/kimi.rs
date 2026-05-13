@@ -19,9 +19,7 @@ fn read_wire_timestamps(wire_path: &PathBuf) -> Vec<DateTime<Utc>> {
     for line in wire_content.lines() {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
             if let Some(ts) = value.get("timestamp").and_then(|t| t.as_f64()) {
-                if let Some(dt) =
-                    DateTime::from_timestamp(ts as i64, ((ts % 1.0) * 1e9) as u32)
-                {
+                if let Some(dt) = DateTime::from_timestamp(ts as i64, ((ts % 1.0) * 1e9) as u32) {
                     out.push(dt);
                 }
             }
@@ -75,6 +73,7 @@ fn flush_turn(
         usage: None,
         duration_ms: None,
         model: None,
+        completed_at: None,
     });
     *turn_index += 1;
 }
@@ -177,9 +176,7 @@ impl KimiParser {
                 let created = metadata
                     .and_then(|m| m.created().ok())
                     .map(|t| {
-                        let duration = t
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default();
+                        let duration = t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
                         DateTime::from_timestamp(duration.as_secs() as i64, 0)
                     })
                     .flatten();
