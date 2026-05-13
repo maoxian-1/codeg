@@ -266,33 +266,31 @@ impl KimiParser {
                     }
 
                     current_role = Some(TurnRole::User);
-                    if let Some(content) = value.get("content").and_then(|c| c.as_str()) {
-                        let text = content.trim().to_string();
-                        if !text.is_empty() {
-                            current_turn_blocks.push(ContentBlock::Text { text });
-                        }
-                    }
+                    current_turn_blocks.extend(extract_content_blocks(&value));
                 }
                 "assistant" => {
-                    if matches!(current_role.as_ref(), Some(TurnRole::User)) {
-                        if let Some(prev_role) = current_role.take() {
-                            flush_turn(
-                                prev_role,
-                                &mut current_turn_blocks,
-                                &mut turns,
-                                &mut turn_index,
-                                &timestamps,
-                            );
+                    match current_role.as_ref() {
+                        Some(TurnRole::User) => {
+                            if let Some(prev_role) = current_role.take() {
+                                flush_turn(
+                                    prev_role,
+                                    &mut current_turn_blocks,
+                                    &mut turns,
+                                    &mut turn_index,
+                                    &timestamps,
+                                );
+                            }
+                            current_role = Some(TurnRole::Assistant);
                         }
-                        current_role = Some(TurnRole::Assistant);
+                        Some(TurnRole::Assistant) => {
+                            // Keep current role to merge consecutive assistant messages
+                        }
+                        _ => {
+                            current_role = Some(TurnRole::Assistant);
+                        }
                     }
 
-                    if let Some(content) = value.get("content").and_then(|c| c.as_str()) {
-                        let text = content.trim().to_string();
-                        if !text.is_empty() {
-                            current_turn_blocks.push(ContentBlock::Text { text });
-                        }
-                    }
+                    current_turn_blocks.extend(extract_content_blocks(&value));
                 }
                 "_system_prompt" => {
                     if folder_path.is_none() {
@@ -342,6 +340,72 @@ impl KimiParser {
             session_stats: None,
         })
     }
+}
+
+fn extract_content_blocks(value: &serde_json::Value) -> Vec<ContentBlock> {
+    let mut blocks = Vec::new();
+    let content = match value.get("content") {
+        Some(c) => c,
+        None => return blocks,
+    };
+
+    if let Some(text) = content.as_str() {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            blocks.push(ContentBlock::Text {
+                text: trimmed.to_string(),
+            });
+        }
+        return blocks;
+    }
+
+    if let Some(arr) = content.as_array() {
+        for item in arr {
+            let block_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            match block_type {
+                "text" => {
+                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            blocks.push(ContentBlock::Text {
+                                text: trimmed.to_string(),
+                            });
+                        }
+                    }
+                }
+                "thinking" => {
+                    if let Some(text) = item.get("thinking").and_then(|t| t.as_str()) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            blocks.push(ContentBlock::Thinking {
+                                text: trimmed.to_string(),
+                            });
+                        }
+                    }
+                }
+                "tool_use" => {
+                    let tool_use_id = item
+                        .get("id")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string());
+                    let tool_name = item
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let input_preview = item.get("input").map(|i| i.to_string());
+                    blocks.push(ContentBlock::ToolUse {
+                        tool_use_id,
+                        tool_name,
+                        input_preview,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    blocks
 }
 
 fn extract_cwd_from_system_prompt(content: &str) -> Option<String> {

@@ -246,30 +246,30 @@ pub fn get_agent_meta(agent_type: AgentType) -> AcpAgentMeta {
             name: "Kimi CLI",
             description: "Moonshot AI's coding agent CLI",
             distribution: AgentDistribution::Binary {
-                version: "1.41.0",
+                version: "1.42.0",
                 cmd: "kimi",
                 args: &["acp"],
                 env: &[],
                 platforms: &[
                     PlatformBinary {
                         platform: "darwin-aarch64",
-                        url: "https://ghproxy.net/https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-apple-darwin.tar.gz",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.42.0/kimi-1.42.0-aarch64-apple-darwin.tar.gz",
                     },
                     PlatformBinary {
                         platform: "linux-aarch64",
-                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-unknown-linux-gnu.tar.gz",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.42.0/kimi-1.42.0-aarch64-unknown-linux-gnu.tar.gz",
                     },
                     PlatformBinary {
                         platform: "linux-x86_64",
-                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-x86_64-unknown-linux-gnu.tar.gz",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.42.0/kimi-1.42.0-x86_64-unknown-linux-gnu.tar.gz",
                     },
                     PlatformBinary {
                         platform: "windows-aarch64",
-                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-aarch64-pc-windows-msvc.zip",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.42.0/kimi-1.42.0-aarch64-pc-windows-msvc.zip",
                     },
                     PlatformBinary {
                         platform: "windows-x86_64",
-                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.41.0/kimi-1.41.0-x86_64-pc-windows-msvc.zip",
+                        url: "https://github.com/MoonshotAI/kimi-cli/releases/download/1.42.0/kimi-1.42.0-x86_64-pc-windows-msvc.zip",
                     },
                 ],
             },
