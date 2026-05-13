@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -214,6 +214,14 @@ impl TerminalInstance {
 
 pub struct TerminalRuntime {
     terminals: Mutex<TerminalMap>,
+    /// Base environment merged into every spawned terminal command before
+    /// the agent's per-request `env` is applied. This is where the codeg
+    /// git credential helper (`GIT_CONFIG_*`) lives so an agent that runs
+    /// `git push` via the ACP `terminal/create` tool inherits the same
+    /// auth path the agent process itself does. Per-request env from the
+    /// agent overrides on key collision so an agent can still scrub or
+    /// override anything explicitly.
+    base_env: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -226,9 +234,14 @@ pub struct TerminalOutputDelta {
 }
 
 impl TerminalRuntime {
-    pub fn new() -> Self {
+    /// Construct a runtime where every spawned command starts with `base_env`
+    /// applied, before the agent's per-request env overrides are layered on
+    /// top. Use this to propagate process-level invariants like the git
+    /// credential helper across `terminal/create` invocations.
+    pub fn with_base_env(base_env: BTreeMap<String, String>) -> Self {
         Self {
             terminals: Mutex::new(HashMap::new()),
+            base_env,
         }
     }
 
@@ -264,6 +277,12 @@ impl TerminalRuntime {
             command.current_dir(cwd);
         }
 
+        // Apply the runtime's base env first (e.g. `GIT_CONFIG_*` for the
+        // codeg credential helper), then layer the agent's request env on
+        // top so agents can still override or scrub specific keys.
+        for (key, value) in &self.base_env {
+            command.env(key, value);
+        }
         for env_var in &request.env {
             command.env(&env_var.name, &env_var.value);
         }
@@ -555,4 +574,78 @@ fn decode_available_utf8(pending: &mut Vec<u8>) -> String {
         pending.drain(..consumed);
     }
     output
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use sacp::schema::{EnvVariable, SessionId, WaitForTerminalExitRequest};
+
+    /// Regression: when an ACP agent calls `terminal/create` (e.g. to run
+    /// `git push`), the runtime's base env — populated by the connection
+    /// layer with the codeg credential helper's `GIT_CONFIG_*` keys —
+    /// must reach the spawned process. Per-request `env` from the agent
+    /// still wins on key collision so the agent can scrub or override
+    /// specific keys for individual commands.
+    #[tokio::test]
+    async fn base_env_propagates_and_request_env_overrides() {
+        let mut base_env = BTreeMap::new();
+        base_env.insert("CODEG_TEST_BASE_VAR".to_string(), "from_base".to_string());
+        base_env.insert("CODEG_TEST_OVERRIDE".to_string(), "loses".to_string());
+        let runtime = TerminalRuntime::with_base_env(base_env);
+
+        let session_id = SessionId::new("test-session".to_string());
+        let mut request = CreateTerminalRequest::new(session_id.clone(), "/bin/sh".to_string());
+        request.args = vec![
+            "-c".into(),
+            // Print both vars on separate lines so we can match each
+            // independently regardless of shell quoting.
+            "printf '%s\\n' \"$CODEG_TEST_BASE_VAR\" \"$CODEG_TEST_OVERRIDE\"".into(),
+        ];
+        request.env = vec![EnvVariable::new("CODEG_TEST_OVERRIDE", "request_wins")];
+
+        let response = runtime
+            .create_terminal(request)
+            .await
+            .expect("create terminal");
+        let terminal_id = response.terminal_id.clone();
+
+        // Wait for the child to exit so the captured output is final.
+        runtime
+            .wait_for_terminal_exit(WaitForTerminalExitRequest::new(
+                session_id.clone(),
+                terminal_id.clone(),
+            ))
+            .await
+            .expect("wait for exit");
+
+        let out = runtime
+            .terminal_output(TerminalOutputRequest::new(
+                session_id.clone(),
+                terminal_id.clone(),
+            ))
+            .await
+            .expect("get output");
+
+        assert!(
+            out.output.contains("from_base"),
+            "base env did not reach the spawned process; got:\n{}",
+            out.output
+        );
+        assert!(
+            out.output.contains("request_wins"),
+            "per-request env did not override base on key collision; got:\n{}",
+            out.output
+        );
+        assert!(
+            !out.output.contains("loses"),
+            "base value leaked through despite the request override; got:\n{}",
+            out.output
+        );
+
+        // Drop terminal handle so the runtime drops its writer ends.
+        runtime
+            .release_all_for_session(&session_id.0.to_string())
+            .await;
+    }
 }

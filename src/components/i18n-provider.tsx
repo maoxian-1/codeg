@@ -211,6 +211,21 @@ export function AppI18nProvider({
     persistLanguageCookies(languageSettings, appLocale)
   }, [appLocale, languageSettings, languageSettingsLoaded])
 
+  // Push the resolved locale to the system tray menu (Tauri only). The
+  // tray was built once at app startup with whatever was persisted then,
+  // so without this it would stay stale after a language change.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!("__TAURI_INTERNALS__" in window)) return
+    void import("@/lib/tauri")
+      .then((t) => t.setTrayLocale(appLocale))
+      .catch(() => {
+        // Tray refresh is best-effort: the tray may not be installed
+        // (Linux without a status-bar host), and a stale label is a
+        // smaller problem than crashing the i18n provider.
+      })
+  }, [appLocale])
+
   useEffect(() => {
     if (appLocale === messagesLocale) {
       return

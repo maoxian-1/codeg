@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "tauri-runtime")]
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::acp::binary_cache;
 use crate::acp::error::AcpError;
@@ -2178,6 +2178,20 @@ pub async fn acp_connect(
 
     // Resolve model provider credentials if configured.
     apply_model_provider_env(agent_type, setting.as_ref(), &mut runtime_env, &db.conn).await;
+
+    // Inject the codeg git credential helper so git invocations issued by
+    // the agent (or its child shells) authenticate against the GitHub
+    // accounts configured in Settings → Version Control, mirroring what
+    // the built-in terminal already does.
+    if let Ok(app_data_dir) = app_handle.path().app_data_dir() {
+        if let Some(cred_env) =
+            crate::commands::terminal::prepare_credential_env(&app_data_dir)
+        {
+            for (key, value) in cred_env {
+                runtime_env.insert(key, value);
+            }
+        }
+    }
 
     // For OpenClaw: when creating a new conversation (no session_id to resume),
     // signal that we want a fresh transcript via --reset-session.

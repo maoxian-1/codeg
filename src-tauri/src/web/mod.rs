@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use shutdown::ShutdownSignal;
 
 use sea_orm::{DatabaseConnection, TransactionError, TransactionTrait};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app_error::{AppCommandError, AppErrorCode};
 use crate::app_state::AppState;
@@ -25,6 +25,7 @@ use crate::db::service::app_metadata_service;
 
 const WEB_SERVICE_TOKEN_KEY: &str = "web_service_token";
 const WEB_SERVICE_PORT_KEY: &str = "web_service_port";
+const WEB_SERVICE_AUTO_START_KEY: &str = "web_service_auto_start";
 pub const DEFAULT_WEB_SERVICE_PORT: u16 = 3080;
 
 pub struct WebServerState {
@@ -171,11 +172,19 @@ async fn persist_web_service_config(
     })
 }
 
-#[derive(Clone, Serialize)]
+fn parse_bool_metadata(value: Option<String>) -> bool {
+    matches!(
+        value.as_deref().map(str::trim),
+        Some("true") | Some("1") | Some("yes")
+    )
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebServiceConfig {
     pub token: Option<String>,
     pub port: Option<u16>,
+    pub auto_start: bool,
 }
 
 pub async fn load_web_service_config(
@@ -189,7 +198,51 @@ pub async fn load_web_service_config(
         .map_err(AppCommandError::from)?
         .as_deref()
         .and_then(|s| s.trim().parse::<u16>().ok());
-    Ok(WebServiceConfig { token, port })
+    let auto_start = parse_bool_metadata(
+        app_metadata_service::get_value(conn, WEB_SERVICE_AUTO_START_KEY)
+            .await
+            .map_err(AppCommandError::from)?,
+    );
+    Ok(WebServiceConfig {
+        token: token.filter(|value| !value.trim().is_empty()),
+        port,
+        auto_start,
+    })
+}
+
+pub async fn update_web_service_config_core(
+    conn: &DatabaseConnection,
+    config: WebServiceConfig,
+) -> Result<WebServiceConfig, AppCommandError> {
+    let token = config.token.unwrap_or_default().trim().to_string();
+    let port = config.port.unwrap_or(DEFAULT_WEB_SERVICE_PORT);
+    let auto_start = if config.auto_start { "true" } else { "false" }.to_string();
+    let port_str = port.to_string();
+
+    conn.transaction::<_, (), AppCommandError>(move |txn| {
+        Box::pin(async move {
+            app_metadata_service::upsert_value(txn, WEB_SERVICE_TOKEN_KEY, &token)
+                .await
+                .map_err(AppCommandError::from)?;
+            app_metadata_service::upsert_value(txn, WEB_SERVICE_PORT_KEY, &port_str)
+                .await
+                .map_err(AppCommandError::from)?;
+            app_metadata_service::upsert_value(txn, WEB_SERVICE_AUTO_START_KEY, &auto_start)
+                .await
+                .map_err(AppCommandError::from)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e: TransactionError<AppCommandError>| match e {
+        TransactionError::Connection(db) => {
+            AppCommandError::new(AppErrorCode::DatabaseError, "Database transaction failed")
+                .with_detail(db.to_string())
+        }
+        TransactionError::Transaction(inner) => inner,
+    })?;
+
+    load_web_service_config(conn).await
 }
 
 /// Stable i18n-key prefixes — the frontend maps these to localized text.
@@ -477,10 +530,9 @@ pub(crate) async fn do_probe_web_service_port(
 // ── Tauri commands (thin wrappers) ──
 
 #[cfg(feature = "tauri-runtime")]
-#[tauri::command]
-pub async fn start_web_server(
+pub(crate) async fn do_start_web_server_tauri(
     app: tauri::AppHandle,
-    state: tauri::State<'_, WebServerState>,
+    state: &WebServerState,
     port: Option<u16>,
     host: Option<String>,
     token: Option<String>,
@@ -490,7 +542,7 @@ pub async fn start_web_server(
     // The embedded web server uses Tauri's resource directory for static files.
     use tauri::Manager;
 
-    let ws = &*state;
+    let ws = state;
 
     // Atomically claim the running flag; concurrent starts see AlreadyExists.
     ws.running
@@ -546,6 +598,12 @@ pub async fn start_web_server(
         data_dir: app.path().app_data_dir().unwrap_or_default(),
         web_server_state: WebServerState::new(), // placeholder; not used by handlers
         chat_channel_manager: crate::app_state::default_chat_channel_manager(),
+        // Reuse the same handle the Tauri-mode subscriber writes to so HTTP
+        // and webview readers see the identical snapshot.
+        pet_state: app
+            .state::<crate::pet_state_mapper::PetStateHandle>()
+            .inner()
+            .clone(),
     });
 
     // See do_start_web_server_with_state for rationale on the reset.
@@ -588,6 +646,18 @@ pub async fn start_web_server(
 
 #[cfg(feature = "tauri-runtime")]
 #[tauri::command]
+pub async fn start_web_server(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, WebServerState>,
+    port: Option<u16>,
+    host: Option<String>,
+    token: Option<String>,
+) -> Result<WebServerInfo, AppCommandError> {
+    do_start_web_server_tauri(app, &state, port, host, token).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
 pub async fn stop_web_server(
     state: tauri::State<'_, WebServerState>,
 ) -> Result<(), AppCommandError> {
@@ -609,6 +679,15 @@ pub async fn get_web_service_config(
     db: tauri::State<'_, crate::db::AppDatabase>,
 ) -> Result<WebServiceConfig, AppCommandError> {
     load_web_service_config(&db.conn).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn update_web_service_config(
+    db: tauri::State<'_, crate::db::AppDatabase>,
+    config: WebServiceConfig,
+) -> Result<WebServiceConfig, AppCommandError> {
+    update_web_service_config_core(&db.conn, config).await
 }
 
 #[cfg(feature = "tauri-runtime")]

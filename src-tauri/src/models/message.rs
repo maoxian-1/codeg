@@ -52,6 +52,22 @@ pub struct AgentExecutionStats {
     pub tool_calls: Vec<AgentToolCall>,
 }
 
+/// Image payload shared by content blocks and ACP wire events.
+///
+/// Same shape used in three places:
+/// 1. `ContentBlock::Image` (user-attached or assistant inline image)
+/// 2. `ContentBlock::ImageGeneration.images` (codex-acp v0.14+ image generation)
+/// 3. `ToolCallState.images` (snapshot recovery for in-flight image generation)
+///
+/// Re-exported from `acp::types` as `ToolCallImageInfo` for ACP wire callsites.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageData {
+    pub data: String,
+    pub mime_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
@@ -63,6 +79,25 @@ pub enum ContentBlock {
         mime_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         uri: Option<String>,
+    },
+    /// codex-acp v0.14+ image generation (PR #271). Distinct from `Image`
+    /// because codex-acp positions image generation as a first-class
+    /// `ToolCall(title="Image generation")` carrying a `revised_prompt` +
+    /// generated image — not a generic image attachment. Modeling it as
+    /// its own variant lets us keep `revised_prompt` and route to a
+    /// dedicated renderer without title-string heuristics.
+    ///
+    /// Singular `image` (not Vec): codex-acp emits exactly one image per
+    /// `ToolCall` (each `image_generation_begin/end` event pair has its
+    /// own `call_id`). When a turn produces N images, the agent emits N
+    /// separate ToolCalls — so the right unit is "one block, one image".
+    /// `None` represents the in-flight placeholder state during streaming
+    /// (`ImageGenerationBegin` arrived, `ImageGenerationEnd` hasn't yet).
+    ImageGeneration {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        revised_prompt: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        image: Option<ImageData>,
     },
     ToolUse {
         tool_use_id: Option<String>,
@@ -101,6 +136,14 @@ pub struct UnifiedMessage {
     pub duration_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Wall-clock time the message finished. Each parser sets this to the
+    /// best end-marker it has access to (e.g. Codex's `token_count` event,
+    /// OpenCode's `completed_ms`, or just the event-log `timestamp` for
+    /// agents that log post-generation). Crucially this is NOT computed as
+    /// `timestamp + duration_ms` — those two fields encode unrelated spans
+    /// in most parsers and adding them produces wrong completion times.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,4 +166,10 @@ pub struct MessageTurn {
     pub duration_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Wall-clock time the turn finished, propagated from the last
+    /// `UnifiedMessage` absorbed into this turn. Not computed from
+    /// `timestamp + duration_ms` — those fields encode unrelated spans in
+    /// most parsers (event-log time vs. full turn span).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
 }

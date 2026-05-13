@@ -39,6 +39,12 @@ pub struct PromptCapabilitiesInfo {
     pub embedded_context: bool,
 }
 
+/// Image attached to a tool call on the ACP wire (e.g. codex-acp v0.14+
+/// image generation). Re-export of `models::message::ImageData` — the same
+/// payload is used by `ContentBlock::Image` / `ContentBlock::ImageGeneration`
+/// and by `ToolCallState.images` for snapshot recovery.
+pub type ToolCallImageInfo = crate::models::message::ImageData;
+
 /// 所有 ACP 事件统一通过此 envelope 发出。
 /// `seq` 用于前端去重锚点（Phase 0 占位 0，Phase 1 起严格递增）。
 /// `connection_id` 上提到顶层，配合 `#[serde(flatten)]` 让 JSON 保持平铺：
@@ -77,6 +83,10 @@ pub enum AcpEvent {
         locations: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         meta: Option<serde_json::Value>,
+        /// Images attached to this tool call (e.g. codex image generation).
+        /// `None` when the agent didn't supply any.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        images: Option<Vec<ToolCallImageInfo>>,
     },
     /// Tool call status/content updated
     ToolCallUpdate {
@@ -92,6 +102,10 @@ pub enum AcpEvent {
         locations: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         meta: Option<serde_json::Value>,
+        /// Replace-on-update semantics: `Some(v)` replaces the prior `images`
+        /// vec on `ToolCallState`, `None` preserves it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        images: Option<Vec<ToolCallImageInfo>>,
     },
     /// Agent requests permission
     PermissionRequest {

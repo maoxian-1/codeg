@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useRef } from "react"
+import { memo, useCallback, useMemo, useRef } from "react"
 import { Reorder } from "motion/react"
 import { X } from "lucide-react"
 import { useTranslations } from "next-intl"
@@ -14,6 +14,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { useLongPressDrag } from "@/hooks/use-long-press-drag"
 import type { TabItem as TabItemData } from "@/contexts/tab-context"
 
 interface TabItemProps {
@@ -28,6 +29,10 @@ interface TabItemProps {
   onCloseAll: () => void
   onPin: (tabId: string) => void
   onToggleTile: () => void
+  isCoarsePointer: boolean
+  isTouchSorting: boolean
+  onTouchSortingStart: (tabId: string) => void
+  onTouchSortingEnd: () => void
 }
 
 export const TabItem = memo(function TabItem({
@@ -42,9 +47,12 @@ export const TabItem = memo(function TabItem({
   onCloseAll,
   onPin,
   onToggleTile,
+  isCoarsePointer,
+  isTouchSorting,
+  onTouchSortingStart,
+  onTouchSortingEnd,
 }: TabItemProps) {
   const t = useTranslations("Folder.tabs")
-  const isDragging = useRef(false)
   const itemRef = useRef<HTMLDivElement>(null)
 
   const resolvedFolderName = folderName ?? String(tab.folderId)
@@ -61,13 +69,23 @@ export const TabItem = memo(function TabItem({
     el.style.userSelect = ""
   }, [])
 
+  const handleLongPressStart = useCallback(
+    () => onTouchSortingStart(tab.id),
+    [onTouchSortingStart, tab.id]
+  )
+
+  const { dragControls, gestureHandlers } = useLongPressDrag({
+    enabled: isCoarsePointer,
+    onStart: handleLongPressStart,
+    onEnd: onTouchSortingEnd,
+    onDragSettle: clearResidualStyles,
+  })
+
   const handleClick = useCallback(() => {
-    if (isDragging.current) return
     onSwitch(tab.id)
   }, [onSwitch, tab.id])
 
   const handleDoubleClick = useCallback(() => {
-    if (isDragging.current) return
     if (!tab.isPinned) {
       onPin(tab.id)
     }
@@ -81,26 +99,28 @@ export const TabItem = memo(function TabItem({
     onCloseOthers(tab.id)
   }, [onCloseOthers, tab.id])
 
+  const whileDrag = useMemo(() => ({ scale: 1.03 }), [])
+
   return (
     <Reorder.Item
       ref={itemRef}
       as="div"
       value={tab}
       data-tab-id={tab.id}
-      onDragStart={() => {
-        isDragging.current = true
-      }}
-      onDragEnd={() => {
-        setTimeout(() => {
-          isDragging.current = false
-          clearResidualStyles()
-        }, 200)
-      }}
+      drag="x"
+      dragControls={dragControls}
+      dragListener={!isCoarsePointer}
+      whileDrag={whileDrag}
+      {...gestureHandlers}
       onLayoutAnimationComplete={clearResidualStyles}
-      className="shrink-0 rounded-full cursor-grab active:cursor-grabbing active:opacity-90 active:shadow-md active:z-50"
+      className={cn(
+        "shrink-0 rounded-full cursor-grab active:cursor-grabbing",
+        !isCoarsePointer && "active:opacity-90 active:shadow-md active:z-50",
+        isTouchSorting && "z-50 opacity-90 shadow-md ring-1 ring-primary/25"
+      )}
     >
       <ContextMenu>
-        <ContextMenuTrigger asChild>
+        <ContextMenuTrigger asChild disabled={isTouchSorting}>
           <div
             role="tab"
             aria-selected={isActive}

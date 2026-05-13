@@ -4,6 +4,7 @@ import type {
   MessageRole,
   TurnUsage,
   AgentExecutionStats,
+  ToolCallStatus,
 } from "@/lib/types"
 import { isAgentLikeToolName } from "@/lib/adapters/tool-kind-classifier"
 
@@ -28,6 +29,26 @@ export type AdaptedToolCallPart = {
   agentStats?: AgentExecutionStats | null
 }
 
+/**
+ * Inline rendering of codex-acp v0.14+ image generation. Mirrors the
+ * `ContentBlock::ImageGeneration` data shape. Distinct from regular tool
+ * calls so it never folds into a `tool-group` — each image stands alone
+ * with its own labeled card. One image per part — multi-image turns are
+ * already split into multiple consecutive blocks at the runtime layer.
+ *
+ * `status` lets the renderer distinguish "still generating" from "the call
+ * failed without producing an image" when `image` is null. `null` means
+ * the source didn't carry status (Rust JSONL replay) — by definition such
+ * blocks always have an image, so the status is irrelevant there.
+ */
+export type AdaptedGeneratedImagePart = {
+  type: "generated-image"
+  revisedPrompt: string | null
+  /** `null` while the agent has emitted the ToolCall but no image yet. */
+  image: UserImageDisplay | null
+  status: ToolCallStatus | null
+}
+
 export type AdaptedContentPart =
   | { type: "text"; text: string }
   | AdaptedToolCallPart
@@ -44,6 +65,7 @@ export type AdaptedContentPart =
       items: AdaptedToolCallPart[]
       isStreaming: boolean
     }
+  | AdaptedGeneratedImagePart
 
 export interface UserResourceDisplay {
   name: string
@@ -70,17 +92,12 @@ export interface AdaptedMessage {
   content: AdaptedContentPart[]
   userResources?: UserResourceDisplay[]
   userImages?: UserImageDisplay[]
-  /**
-   * Inline images produced by the assistant (e.g. Codex image_generation
-   * skill). Reuses UserImageDisplay shape; kept on a separate field from
-   * userImages because user-uploaded vs assistant-generated images render
-   * with different components / alignments / actions (download, etc.).
-   */
-  assistantImages?: UserImageDisplay[]
   timestamp: string
   usage?: TurnUsage | null
   duration_ms?: number | null
   model?: string | null
+  /** Wall-clock completion time as ISO string (parsed once at the Rust layer). */
+  completed_at?: string | null
 }
 
 export interface AdapterMessageText {
@@ -593,9 +610,40 @@ function adaptContentBlock(
         isStreaming,
       }
 
+    case "image_generation": {
+      const img = block.image ?? null
+      const display: UserImageDisplay | null =
+        img && img.data && img.mime_type
+          ? {
+              name: deriveImageNameFromImageData(img),
+              data: img.data,
+              mime_type: img.mime_type,
+              uri: img.uri ?? null,
+            }
+          : null
+      return {
+        type: "generated-image",
+        revisedPrompt: block.revised_prompt ?? null,
+        image: display,
+        status: block.status ?? null,
+      }
+    }
+
     default:
       return null
   }
+}
+
+function deriveImageNameFromImageData(img: {
+  data: string
+  mime_type: string
+  uri?: string | null
+}): string {
+  if (img.uri && img.uri.trim().length > 0) {
+    return fileNameFromUri(img.uri)
+  }
+  const ext = img.mime_type.split("/")[1]?.split("+")[0] ?? "image"
+  return `image.${ext}`
 }
 
 /**
@@ -819,10 +867,11 @@ export function adaptMessageTurn(
     turn.role === "user"
       ? splitUserTextAndResources(groupedContent, text.attachedResources)
       : { parts: groupedContent, resources: [] as UserResourceDisplay[] }
+  // Only user-uploaded images surface as top-of-message attachments.
+  // Assistant-side image_generation flows through the inline
+  // `generated-image` part, rendered in-position.
   const userImages =
     turn.role === "user" ? extractUserImagesFromBlocks(turn.blocks) : []
-  const assistantImages =
-    turn.role === "assistant" ? extractUserImagesFromBlocks(turn.blocks) : []
 
   return {
     id: turn.id,
@@ -831,11 +880,11 @@ export function adaptMessageTurn(
     userResources:
       userSplit.resources.length > 0 ? userSplit.resources : undefined,
     userImages: userImages.length > 0 ? userImages : undefined,
-    assistantImages: assistantImages.length > 0 ? assistantImages : undefined,
     timestamp: turn.timestamp,
     usage: turn.usage,
     duration_ms: turn.duration_ms,
     model: turn.model,
+    completed_at: turn.completed_at,
   }
 }
 
@@ -873,6 +922,7 @@ interface TurnCacheEntry {
   usage: TurnUsage | null | undefined
   duration_ms: number | null | undefined
   model: string | null | undefined
+  completed_at: string | null | undefined
   adapted: AdaptedMessage
 }
 
@@ -936,7 +986,8 @@ export function createMessageTurnAdapter(): MessageTurnAdapter {
             cached.role === turn.role &&
             cached.usage === turn.usage &&
             cached.duration_ms === turn.duration_ms &&
-            cached.model === turn.model
+            cached.model === turn.model &&
+            cached.completed_at === turn.completed_at
           ) {
             out[i] = cached.adapted
             continue
@@ -956,6 +1007,7 @@ export function createMessageTurnAdapter(): MessageTurnAdapter {
             usage: turn.usage,
             duration_ms: turn.duration_ms,
             model: turn.model,
+            completed_at: turn.completed_at,
             adapted,
           })
         } else {

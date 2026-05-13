@@ -216,6 +216,18 @@ function blocksToMarkdown(
         }
         case "image":
           return `![image](data:${sanitizeMimeType(block.mime_type)};base64,${block.data})`
+        case "image_generation": {
+          const lines: string[] = []
+          if (block.revised_prompt && block.revised_prompt.trim().length > 0) {
+            lines.push(`> _Revised prompt:_ ${block.revised_prompt.trim()}`)
+          }
+          if (block.image) {
+            lines.push(
+              `![image](data:${sanitizeMimeType(block.image.mime_type)};base64,${block.image.data})`
+            )
+          }
+          return lines.join("\n\n")
+        }
         default:
           return ""
       }
@@ -245,6 +257,21 @@ function blocksToHtml(blocks: ContentBlock[], labels: ExportLabels): string {
         }
         case "image":
           return `<div class="image-block"><img src="data:${sanitizeMimeType(block.mime_type)};base64,${escapeHtml(block.data)}" alt="image" style="max-width:100%;border-radius:8px;" /></div>`
+        case "image_generation": {
+          const parts: string[] = ['<div class="image-generation-block">']
+          if (block.revised_prompt && block.revised_prompt.trim().length > 0) {
+            parts.push(
+              `<blockquote class="image-generation-prompt"><em>Revised prompt:</em> ${escapeHtml(block.revised_prompt.trim()).replace(/\n/g, "<br>")}</blockquote>`
+            )
+          }
+          if (block.image) {
+            parts.push(
+              `<img src="data:${sanitizeMimeType(block.image.mime_type)};base64,${escapeHtml(block.image.data)}" alt="image" style="max-width:100%;border-radius:8px;" />`
+            )
+          }
+          parts.push("</div>")
+          return parts.join("")
+        }
         default:
           return ""
       }

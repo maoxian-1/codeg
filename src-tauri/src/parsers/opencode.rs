@@ -278,17 +278,27 @@ impl OpenCodeParser {
                 None
             };
 
-            let duration_ms = if is_assistant {
-                let completed_ms = value
+            let completed_ms = if is_assistant {
+                value
                     .get("time")
                     .and_then(|t| t.get("completed"))
-                    .and_then(|c| c.as_i64());
-                match completed_ms {
-                    Some(done) if done > created_ms => Some((done - created_ms) as u64),
-                    _ => None,
-                }
+                    .and_then(|c| c.as_i64())
             } else {
                 None
+            };
+            let duration_ms = match completed_ms {
+                Some(done) if done > created_ms => Some((done - created_ms) as u64),
+                _ => None,
+            };
+            // OpenCode is the only parser whose `timestamp` is the message
+            // creation time; for assistants the real completion is the
+            // explicit `time.completed` millisecond. Reject values that
+            // aren't strictly after `created_ms` (zero, partial writes,
+            // clock skew) — those would render as 1970 or before the start.
+            // Fall back to the creation timestamp in that case.
+            let completed_at = match completed_ms {
+                Some(done) if done > created_ms => Some(millis_to_datetime(done)),
+                _ => Some(timestamp),
             };
 
             messages.push(UnifiedMessage {
@@ -299,6 +309,7 @@ impl OpenCodeParser {
                 usage,
                 duration_ms,
                 model: msg_model,
+                completed_at,
             });
         }
 
@@ -786,6 +797,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else if matches!(msg.role, MessageRole::System) {
@@ -797,6 +809,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else {
@@ -805,6 +818,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
             let mut duration_ms = msg.duration_ms;
             let mut turn_model = msg.model.clone();
             let timestamp = msg.timestamp;
+            let mut completed_at = msg.completed_at;
             i += 1;
 
             // Only absorb immediately following Tool messages
@@ -820,6 +834,9 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 if turn_model.is_none() {
                     turn_model = messages[i].model.clone();
                 }
+                if messages[i].completed_at.is_some() {
+                    completed_at = messages[i].completed_at;
+                }
                 i += 1;
             }
 
@@ -831,6 +848,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage,
                 duration_ms,
                 model: turn_model,
+                completed_at,
             });
         }
     }

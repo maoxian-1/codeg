@@ -12,11 +12,13 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
 import {
   startWebServer,
   stopWebServer,
   getWebServerStatus,
   getWebServiceConfig,
+  updateWebServiceConfig,
   probeWebServicePort,
   type WebServerInfo,
   type WebServicePortProbe,
@@ -148,6 +150,8 @@ export function WebServiceSettings() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [portProbe, setPortProbe] = useState<WebServicePortProbe | null>(null)
+  const [autoStart, setAutoStart] = useState(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
 
   const probePort = useCallback(async (portNum: number) => {
     try {
@@ -160,11 +164,20 @@ export function WebServiceSettings() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const [info, savedConfig] = await Promise.all([
+      const fallbackConfig = {
+        token: null,
+        port: null,
+        autoStart: false,
+      }
+      const [info, configResult] = await Promise.all([
         getWebServerStatus(),
-        getWebServiceConfig().catch(() => ({ token: null, port: null })),
+        getWebServiceConfig()
+          .then((config) => ({ ok: true as const, config }))
+          .catch(() => ({ ok: false as const, config: fallbackConfig })),
       ])
+      const savedConfig = configResult.config
       setStatus(info)
+      setAutoStart(savedConfig.autoStart ?? false)
       if (info) {
         setPort(String(info.port))
         setToken(info.token)
@@ -179,6 +192,7 @@ export function WebServiceSettings() {
         // user understands why a fresh start may fail with port-in-use.
         probePort(resolvedPort)
       }
+      setConfigLoaded(configResult.ok)
     } catch {
       // Server status unavailable
     }
@@ -187,6 +201,40 @@ export function WebServiceSettings() {
   useEffect(() => {
     fetchStatus()
   }, [fetchStatus])
+
+  const persistWebServiceConfig = useCallback(
+    async (nextAutoStart = autoStart) => {
+      const portNum = parseInt(port, 10)
+      if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+        return
+      }
+
+      try {
+        await updateWebServiceConfig({
+          port: portNum,
+          token: token.trim() || null,
+          autoStart: nextAutoStart,
+        })
+      } catch {
+        setError(t("saveConfigFailed"))
+      }
+    },
+    [autoStart, port, t, token]
+  )
+
+  useEffect(() => {
+    if (!configLoaded) return
+    const portNum = parseInt(port, 10)
+    if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      void persistWebServiceConfig()
+    }, 500)
+
+    return () => window.clearTimeout(timeout)
+  }, [configLoaded, persistWebServiceConfig, port])
 
   const startErrorKeys: Record<string, string> = {
     "web_server.already_running": "errors.alreadyRunning",
@@ -312,6 +360,23 @@ export function WebServiceSettings() {
             placeholder={t("tokenPlaceholder")}
           />
           <p className="text-xs text-muted-foreground">{t("tokenHint")}</p>
+
+          {/* Auto-start config */}
+          <div className="flex items-center gap-4">
+            <label className="w-20 text-sm font-medium">{t("autoStart")}</label>
+            <div className="flex min-w-0 items-center gap-3">
+              <Switch
+                checked={autoStart}
+                onCheckedChange={(checked) => {
+                  setAutoStart(checked)
+                  void persistWebServiceConfig(checked)
+                }}
+              />
+              <span className="text-sm text-muted-foreground">
+                {t("autoStartHint")}
+              </span>
+            </div>
+          </div>
 
           {/* Start/Stop button */}
           <div className="flex items-center gap-4">

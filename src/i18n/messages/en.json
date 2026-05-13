@@ -90,9 +90,7 @@
       "placeholder": "Select zoom level",
       "default": "Default",
       "current": "Current zoom: {zoom}%"
-    },
-    "resetToDefaults": "Reset to defaults",
-    "resetHint": "Reset theme color and window zoom to defaults."
+    }
   },
   "SystemSettings": {
     "loading": "Loading...",
@@ -150,6 +148,7 @@
     "updating": "Installing...",
     "downloading": "Downloading...",
     "upgradeTo": "Upgrade to v{version}",
+    "viewRelease": "View v{version} release",
     "foundUpdate": "New version v{version} found",
     "alreadyLatest": "You're on the latest version",
     "checkUpdateFailed": "Failed to check for updates: {message}",
@@ -1754,7 +1753,19 @@
         "copyMessage": "Copy",
         "copied": "Copied",
         "downloadImage": "Download image",
-        "downloadFailed": "Download failed: {message}"
+        "downloadFailed": "Download failed: {message}",
+        "imageGeneration": "Image generation",
+        "imageGenerationPending": "Generating image…",
+        "imageGenerationFailed": "Image generation failed",
+        "model": "Model",
+        "tokenStats": "Token usage",
+        "tokenInput": "Input",
+        "tokenOutput": "Output",
+        "tokenCacheRead": "Cache read",
+        "tokenCacheWrite": "Cache write",
+        "duration": "Duration",
+        "completedAt": "Completed at",
+        "jumpToPreviousUserMessage": "Jump to user message"
       },
       "liveTurnStats": {
         "thinking": "Thinking...",
@@ -1875,8 +1886,8 @@
         "toolGroup": {
           "search": "{count, plural, one {Explored # search} other {Explored # searches}}",
           "command": "{count, plural, one {Ran # command} other {Ran # commands}}",
-          "read": "{count, plural, one {Read # file} other {Read # files}}",
-          "edit": "{count, plural, one {Edited # file} other {Edited # files}}",
+          "read": "{count, plural, one {Read files # time} other {Read files # times}}",
+          "edit": "{count, plural, one {Edited files # time} other {Edited files # times}}",
           "fetch": "{count, plural, one {Fetched # resource} other {Fetched # resources}}",
           "think": "{count, plural, one {Thought # time} other {Thought # times}}",
           "todo": "{count, plural, one {Updated # todo} other {Updated # todos}}",
@@ -1992,6 +2003,8 @@
     "sectionDescription": "Enable to access Codeg remotely via browser",
     "port": "Port",
     "status": "Status",
+    "autoStart": "Auto-start",
+    "autoStartHint": "Start the Web service when Codeg launches",
     "running": "Running",
     "stopped": "Stopped",
     "processing": "Processing...",
@@ -1999,6 +2012,7 @@
     "stop": "Stop",
     "startFailed": "Failed to start",
     "stopFailed": "Failed to stop",
+    "saveConfigFailed": "Failed to save Web service settings",
     "open": "Open",
     "hide": "Hide",
     "show": "Show",
@@ -2248,6 +2262,115 @@
       "created": "Quick message created",
       "saved": "Quick message saved",
       "deleted": "Quick message deleted"
+    }
+  },
+  "Pet": {
+    "menu": {
+      "scale": "Scale",
+      "openManager": "Manage pets",
+      "close": "Close"
+    },
+    "loadError": "Failed to load pet",
+    "missingPetIdParam": "No pet selected",
+    "summonButton": "Pet",
+    "manager": {
+      "title": "Pets",
+      "description": "Floating desktop companions powered by Codex-compatible sprite sheets.",
+      "addPet": "Add pet",
+      "importFromCodex": "Import from Codex",
+      "noPets": "No pets yet. Add one or import from Codex.",
+      "setActive": "Set active",
+      "active": "Active",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Delete pet \"{name}\"? It will be removed from disk.",
+      "summon": "Summon pet window",
+      "openCodexHelp": "Codex pets must be installed under ~/.codex/pets/. None found.",
+      "specRequirement": "Spritesheet must be 1536x1872 PNG or WebP with transparency.",
+      "form": {
+        "id": "Pet ID",
+        "idHelp": "Lowercase letters, digits, '-' and '_'. Max 64 chars.",
+        "displayName": "Display name",
+        "description": "Description (optional)",
+        "spritesheet": "Spritesheet",
+        "chooseFile": "Choose file",
+        "replaceFile": "Replace spritesheet",
+        "saveCreate": "Add pet",
+        "saveUpdate": "Save changes",
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "missingId": "Pet id is required",
+        "missingName": "Display name is required",
+        "missingSpritesheet": "Spritesheet is required",
+        "addFailed": "Failed to add pet",
+        "updateFailed": "Failed to update pet",
+        "deleteFailed": "Failed to delete pet",
+        "loadFailed": "Failed to load pets",
+        "setActiveFailed": "Failed to set active pet",
+        "summonFailed": "Failed to summon pet window"
+      }
+    },
+    "import": {
+      "title": "Import from Codex",
+      "subtitle": "These pets are available under ~/.codex/pets/.",
+      "selectAll": "Select all",
+      "alreadyImported": "Already imported",
+      "renameOnConflict": "Rename conflicts with -imported suffix",
+      "import": "Import selected",
+      "noneFound": "No importable Codex pets found.",
+      "imported": "Imported successfully",
+      "failed": "Import failed",
+      "close": "Close"
+    },
+    "marketplace": {
+      "openMarketplace": "Pet marketplace",
+      "title": "Pet marketplace",
+      "search": "Search pets",
+      "kindFilter": {
+        "all": "All",
+        "object": "Object",
+        "animal": "Animal",
+        "person": "Person",
+        "creature": "Creature"
+      },
+      "sortFilter": {
+        "latest": "Latest",
+        "popular": "Popular",
+        "views": "Most viewed"
+      },
+      "refresh": "Refresh",
+      "install": "Install",
+      "installing": "Installing",
+      "reinstall": "Reinstall",
+      "reinstallConfirm": "Replace local pet \"{name}\"? Existing data will be overwritten.",
+      "cancel": "Cancel",
+      "stats": {
+        "views": "Views",
+        "downloads": "Downloads",
+        "likes": "Likes"
+      },
+      "actions": {
+        "idle": "Idle",
+        "running_right": "Run right",
+        "running_left": "Run left",
+        "waving": "Wave",
+        "jumping": "Jump",
+        "failed": "Fail",
+        "waiting": "Wait",
+        "running": "Run",
+        "review": "Review"
+      },
+      "page": "Page {page} of {total}",
+      "prev": "Previous",
+      "next": "Next",
+      "empty": "No pets match this filter.",
+      "successInstalled": "Installed \"{name}\"",
+      "errors": {
+        "loadFailed": "Failed to load marketplace",
+        "installFailed": "Failed to install pet",
+        "alreadyInstalled": "Pet already exists locally"
+      }
     }
   }
 }

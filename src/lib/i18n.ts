@@ -177,3 +177,33 @@ export function resolveAppLocale(
 
   return resolveSystemLocale(systemLocaleCandidates) ?? FALLBACK_APP_LOCALE
 }
+
+// Read the currently-effective `AppLocale` synchronously. Reading the cookie
+// (kept in sync by i18n-provider) sidesteps the system-mode case where the
+// DB's `language` field doesn't reflect the real OS locale.
+export function getCurrentEffectiveAppLocale(): AppLocale {
+  if (typeof document !== "undefined") {
+    try {
+      const match = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${LANGUAGE_COOKIE_KEY}=`))
+      if (match) {
+        const value = decodeURIComponent(
+          match.slice(LANGUAGE_COOKIE_KEY.length + 1)
+        )
+        const parsed = parseLocaleFromCookieValue(value)
+        if (parsed) return parsed
+      }
+    } catch {
+      // Malformed cookie value (e.g. broken URI sequence): fall through to
+      // navigator-based resolution rather than crashing the caller.
+    }
+  }
+
+  if (typeof navigator !== "undefined") {
+    const resolved = resolveSystemLocale(getSystemLocaleCandidates())
+    if (resolved) return resolved
+  }
+
+  return FALLBACK_APP_LOCALE
+}

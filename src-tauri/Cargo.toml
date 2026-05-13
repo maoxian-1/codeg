@@ -1,6 +1,6 @@
 [package]
 name = "codeg"
-version = "0.11.9"
+version = "0.12.2"
 description = "Agent Code Generation App"
 authors = ["feitao"]
 edition = "2021"
@@ -27,12 +27,14 @@ tauri-runtime = [
     "dep:tauri-plugin-updater",
     "dep:tauri-plugin-process",
     "dep:tauri-plugin-notification",
+    "dep:tauri-plugin-single-instance",
     "dep:keyring",
 ]
 
 [[bin]]
 name = "codeg"
 path = "src/main.rs"
+required-features = ["tauri-runtime"]
 
 [[bin]]
 name = "codeg-server"
@@ -43,7 +45,7 @@ required-features = []
 tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
-tauri = { version = "2", features = [], optional = true }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-opener = { version = "2", optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
 async-trait = "0.1"
@@ -83,7 +85,7 @@ futures-util = "0.3"
 prost = "0.13"
 rand = "0.8"
 qrcode = "0.14"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 include_dir = "0.7"
 sha2 = "0.10"
 
@@ -92,6 +94,7 @@ tauri-plugin-window-state = { version = "2", optional = true }
 tauri-plugin-updater = { version = "2", optional = true }
 tauri-plugin-process = { version = "2", optional = true }
 tauri-plugin-notification = { version = "2", optional = true }
+tauri-plugin-single-instance = { version = "2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
@@ -102,6 +105,10 @@ junction = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["test-util", "macros", "rt", "sync", "time"] }
 
 [patch.crates-io]
 sacp-tokio = { path = "vendor/sacp-tokio" }

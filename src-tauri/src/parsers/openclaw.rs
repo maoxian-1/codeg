@@ -598,6 +598,7 @@ impl OpenClawParser {
                         usage: None,
                         duration_ms: None,
                         model: None,
+                        completed_at: Some(timestamp),
                     });
                 }
                 "assistant" => {
@@ -620,6 +621,7 @@ impl OpenClawParser {
                         usage,
                         duration_ms: None,
                         model: msg_model,
+                        completed_at: Some(timestamp),
                     });
                 }
                 "toolResult" => {
@@ -632,6 +634,7 @@ impl OpenClawParser {
                         usage: None,
                         duration_ms: None,
                         model: None,
+                        completed_at: Some(timestamp),
                     });
                 }
                 _ => {}
@@ -1085,6 +1088,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else if matches!(msg.role, MessageRole::System) {
@@ -1096,6 +1100,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else {
@@ -1105,6 +1110,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
             let duration_ms = msg.duration_ms;
             let turn_model = msg.model.clone();
             let timestamp = msg.timestamp;
+            let mut completed_at = msg.completed_at;
             i += 1;
 
             // Only absorb immediately following Tool messages
@@ -1113,6 +1119,9 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 blocks.extend(messages[i].content.clone());
                 if usage.is_none() {
                     usage = messages[i].usage.clone();
+                }
+                if messages[i].completed_at.is_some() {
+                    completed_at = messages[i].completed_at;
                 }
                 i += 1;
             }
@@ -1125,6 +1134,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage,
                 duration_ms,
                 model: turn_model,
+                completed_at,
             });
         }
     }

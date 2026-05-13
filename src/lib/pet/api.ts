@@ -1,0 +1,167 @@
+// Transport-aware bindings for the pet command surface.
+// All functions go through `getTransport().call(...)` so the same code runs
+// in Tauri (`invoke`) and standalone-server (`fetch`) modes.
+
+import { getTransport } from "@/lib/transport"
+import type { PetState } from "@/lib/pet/animation"
+import type {
+  ImportablePet,
+  ImportCodexPetsRequest,
+  ImportCodexPetsResult,
+  MarketplaceInstallRequest,
+  MarketplaceInstallResponse,
+  MarketplaceListParams,
+  MarketplaceListResponse,
+  NewPetInput,
+  PetCodexImportAvailability,
+  PetDetail,
+  PetMetaPatch,
+  PetSpriteAsset,
+  PetSummary,
+  PetWindowConfig,
+  PetWindowStatePatch,
+} from "./types"
+
+export async function listPets(): Promise<PetSummary[]> {
+  return getTransport().call("pet_list")
+}
+
+export async function getPet(id: string): Promise<PetDetail> {
+  return getTransport().call("pet_get", { id })
+}
+
+export async function readPetSpritesheet(id: string): Promise<PetSpriteAsset> {
+  return getTransport().call("pet_read_spritesheet", { id })
+}
+
+export async function addPet(input: NewPetInput): Promise<PetSummary> {
+  return getTransport().call("pet_add", { ...input })
+}
+
+export async function updatePetMeta(
+  id: string,
+  patch: PetMetaPatch
+): Promise<PetSummary> {
+  return getTransport().call("pet_update_meta", { id, patch })
+}
+
+export async function replacePetSprite(
+  id: string,
+  spritesheetBase64: string
+): Promise<void> {
+  return getTransport().call("pet_replace_sprite", { id, spritesheetBase64 })
+}
+
+export async function deletePet(id: string): Promise<void> {
+  return getTransport().call("pet_delete", { id })
+}
+
+export async function listImportableCodexPets(): Promise<ImportablePet[]> {
+  return getTransport().call("pet_list_importable_codex")
+}
+
+export async function importCodexPets(
+  request: ImportCodexPetsRequest
+): Promise<ImportCodexPetsResult> {
+  return getTransport().call("pet_import_codex", { ...request })
+}
+
+export async function isCodexImportAvailable(): Promise<PetCodexImportAvailability> {
+  return getTransport().call("pet_codex_import_available")
+}
+
+export async function listMarketplacePets(
+  params: MarketplaceListParams
+): Promise<MarketplaceListResponse> {
+  return getTransport().call("pet_marketplace_list", { ...params })
+}
+
+export async function installMarketplacePet(
+  request: MarketplaceInstallRequest
+): Promise<MarketplaceInstallResponse> {
+  return getTransport().call("pet_marketplace_install", { ...request })
+}
+
+export async function getPetSettings(): Promise<PetWindowConfig> {
+  return getTransport().call("pet_get_settings")
+}
+
+export async function setActivePet(
+  petId: string | null
+): Promise<PetWindowConfig> {
+  return getTransport().call("pet_set_active", { petId })
+}
+
+export async function savePetWindowState(
+  patch: PetWindowStatePatch
+): Promise<PetWindowConfig> {
+  return getTransport().call("pet_save_window_state", { ...patch })
+}
+
+// Manual oneshot trigger for events the backend can't observe directly
+// (e.g. merge-completed, which is emitted only from the renderer). The
+// backend forwards the request as a `pet://oneshot` event so the pet
+// window animates regardless of which transport the user is on.
+//
+// Mirrors Rust `PetCelebrationKind`: only the three transient cues that
+// the renderer actually plays are accepted at the API boundary.
+export type PetCelebrationKind = "jumping" | "waving" | "failed"
+
+export async function petCelebrate(kind: PetCelebrationKind): Promise<void> {
+  return getTransport().call("pet_celebrate", { kind })
+}
+
+// Snapshot of the current ambient pet state. The mapper only emits
+// `pet://state` on transitions, so a window mounted *after* the agent
+// already started prompting would otherwise sit on the default `idle`.
+// `usePetState` calls this on mount to fill in the gap.
+export async function getCurrentPetState(): Promise<PetState> {
+  return getTransport().call("pet_get_current_state")
+}
+
+// Tauri-only — these are noops in web mode (the standalone server cannot
+// open native windows on the user's machine). Callers should branch on
+// `isDesktop()` before invoking them.
+export async function openPetWindow(): Promise<void> {
+  return getTransport().call("open_pet_window")
+}
+
+export async function closePetWindow(): Promise<void> {
+  return getTransport().call("close_pet_window")
+}
+
+export async function recordPetWindowPosition(
+  x: number,
+  y: number
+): Promise<void> {
+  return getTransport().call("pet_window_record_position", { x, y })
+}
+
+export interface PetMenuLabels {
+  scale: string
+  openManager: string
+  close: string
+}
+
+/** Pop up the native right-click context menu. Tauri-only; in web mode the
+ * pet route doesn't render a context menu at all (no window to manage). */
+export async function showPetContextMenu(
+  labels: PetMenuLabels,
+  x: number,
+  y: number
+): Promise<void> {
+  return getTransport().call("pet_show_context_menu", { labels, x, y })
+}
+
+// Slug a free-form display name into a pet id. Mirrors the backend's
+// validate_pet_id rules: lowercase ASCII, digits, '-' and '_'. Used as a
+// suggestion when adding a pet — the user can override.
+export function slugifyPetId(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+}

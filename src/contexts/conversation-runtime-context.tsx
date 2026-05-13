@@ -19,6 +19,7 @@ import type {
   DbConversationDetail,
   MessageTurn,
   SessionStats,
+  ToolCallStatus,
   TurnUsage,
 } from "@/lib/types"
 import { inferLiveToolName } from "@/lib/tool-call-normalization"
@@ -162,6 +163,7 @@ type Action =
         usage?: TurnUsage | null
         duration_ms?: number | null
         model?: string | null
+        completed_at?: string | null
       }>
       sessionStats?: SessionStats | null
     }
@@ -294,6 +296,77 @@ function cleanAgentOutput(output: string | null): string | null {
   return text
 }
 
+/**
+ * Decide whether a live `ToolCallInfo` is codex-acp's image-generation
+ * tool call. Detection has to fire during the in-flight window
+ * (ImageGenerationBegin, no images yet) so we can't rely on `images.length`
+ * alone — the load-bearing signal during that window is the title.
+ *
+ * Layered detection:
+ *   1. `title === "Image generation"` — codex-acp PR #271 hardcodes this
+ *      exact English string in `start_image_generation` and
+ *      `end_image_generation`. Primary path.
+ *   2. Case-insensitive title match — defensive for any future codex-acp
+ *      casing/whitespace drift.
+ *   3. `images.length > 0` — defensive when title is somehow lost but
+ *      images are present (e.g. a snapshot replay that drops the title).
+ *
+ * The function is intentionally NOT a generic `kind === "other"` matcher
+ * because many tools surface as ToolKind::Other.
+ */
+function isImageGenerationToolCall(info: {
+  title?: string | null
+  images?: { length: number } | null
+}): boolean {
+  const title = (info.title ?? "").trim()
+  if (title === "Image generation") return true
+  if (title.toLowerCase() === "image generation") return true
+  return (info.images?.length ?? 0) > 0
+}
+
+/**
+ * Narrow the wire-typed `ToolCallInfo.status` (declared as `string`) into
+ * the strict `ToolCallStatus` union — the reducer only ever stores wire
+ * values, but the type system doesn't see that. Anything else falls back
+ * to `null` and the renderer treats it as in-flight.
+ */
+function narrowToolCallStatus(status: string): ToolCallStatus | null {
+  switch (status) {
+    case "pending":
+    case "in_progress":
+    case "completed":
+    case "failed":
+      return status
+    default:
+      return null
+  }
+}
+
+/**
+ * Strip codex-acp's `"Revised prompt: <text>"` framing from a live
+ * `ToolCallInfo.content` string and return the inner text. codex-acp PR #271
+ * wraps the codex `revised_prompt` field this way before serialising it as
+ * `ToolCallContent::Text` (see `image_generation_content` in codex-acp). The
+ * prefix is hardcoded English in upstream, so we match it literally.
+ *
+ * Returns `null` when content is missing, empty after trimming, or doesn't
+ * carry a recognisable revised-prompt frame.
+ */
+function extractRevisedPrompt(content: string | null): string | null {
+  if (!content) return null
+  const trimmed = content.trim()
+  if (trimmed.length === 0) return null
+  const PREFIX = "Revised prompt:"
+  if (trimmed.startsWith(PREFIX)) {
+    const rest = trimmed.slice(PREFIX.length).trim()
+    return rest.length > 0 ? rest : null
+  }
+  // Fall back to the raw content for unforeseen wrappers (e.g. localized
+  // frames in future codex-acp versions). Better to surface something to the
+  // user than silently drop it.
+  return trimmed
+}
+
 function buildStreamingTurnsFromLiveMessage(
   conversationId: number,
   liveMessage: LiveMessage
@@ -424,6 +497,60 @@ function buildStreamingTurnsFromLiveMessage(
       case "tool_call": {
         // Skip child tool calls — they are nested inside Agent cards
         if (childToolCallIds.has(block.info.tool_call_id)) break
+
+        // codex-acp v0.14+ image generation surfaces as a `ToolCall` whose
+        // ACP-wire shape is `(title="Image generation", kind=Other,
+        // content=[Text("Revised prompt: ..."), Image{...}])`. Render this
+        // as a dedicated `image_generation` block instead of the generic
+        // tool_use + tool_result pair so:
+        //   - live and historical (JSONL) paths converge on the same
+        //     ContentBlock variant (zero asymmetry)
+        //   - the user sees one labeled "Image generation" card instead of
+        //     a generic tool card sitting above a detached image
+        //   - the new card is not folded into `groupConsecutiveToolCalls`
+        //     (which only consumes `tool-call` parts)
+        if (isImageGenerationToolCall(block.info)) {
+          // codex-acp emits one image per ToolCall (each `call_id` is a
+          // single ImageGenerationBegin/End pair). One block per image —
+          // multiple images in a turn become multiple consecutive blocks.
+          // Defensive fallback: if a future agent ever sends multiple
+          // images in one ToolCall, we still emit one block per image so
+          // each renders as its own card.
+          const imgs = block.info.images ?? []
+          const revisedPrompt = extractRevisedPrompt(block.info.content)
+          // Live ToolCallStatus is forwarded so the renderer can show a
+          // failure slot when codex reports the call failed before any
+          // image bytes arrived. Without this the in-flight skeleton would
+          // sit there until TurnComplete clears `active_tool_calls`.
+          const status = narrowToolCallStatus(block.info.status)
+          if (imgs.length === 0) {
+            // In-flight placeholder: title arrived, image hasn't (or the
+            // call failed without producing one).
+            currentBlocks.push({
+              type: "image_generation",
+              revised_prompt: revisedPrompt,
+              image: null,
+              status,
+            })
+          } else {
+            for (const img of imgs) {
+              currentBlocks.push({
+                type: "image_generation",
+                revised_prompt: revisedPrompt,
+                image: {
+                  data: img.data,
+                  mime_type: img.mime_type,
+                  uri: img.uri ?? null,
+                },
+                status,
+              })
+            }
+          }
+          if (status === "completed" || status === "failed") {
+            currentGroupHasCompletedTool = true
+          }
+          break
+        }
 
         const toolName = getToolName(block.info)
         currentBlocks.push({
@@ -799,16 +926,19 @@ function reducer(
         const newUsage = turn.usage ?? patch.usage
         const newDuration = turn.duration_ms ?? patch.duration_ms
         const newModel = turn.model ?? patch.model
+        const newCompletedAt = turn.completed_at ?? patch.completed_at
         if (
           newUsage !== turn.usage ||
           newDuration !== turn.duration_ms ||
-          newModel !== turn.model
+          newModel !== turn.model ||
+          newCompletedAt !== turn.completed_at
         ) {
           patchedTurns[patch.index] = {
             ...turn,
             usage: newUsage,
             duration_ms: newDuration,
             model: newModel,
+            completed_at: newCompletedAt,
           }
           changed = true
         }
@@ -1066,6 +1196,7 @@ export function ConversationRuntimeProvider({
                 usage?: TurnUsage | null
                 duration_ms?: number | null
                 model?: string | null
+                completed_at?: string | null
               }> = []
 
               for (let i = 0; i < localAssistantIndices.length; i++) {
@@ -1073,12 +1204,18 @@ export function ConversationRuntimeProvider({
                 let usageToApply: TurnUsage | null | undefined
                 let durationToApply: number | null | undefined
                 let modelToApply: string | null | undefined
+                // For the merged-sub-turn case (offset > 0), the latest
+                // completion is parsed[offset + i] (the sub-turn we matched);
+                // earlier rolled-in parsed turns precede it in time, so we
+                // don't aggregate completion timestamps.
+                let completedAtToApply: string | null | undefined
 
                 if (parsedIdx >= 0 && parsedIdx < parsedAssistantTurns.length) {
                   const pt = parsedAssistantTurns[parsedIdx]
                   usageToApply = pt.usage
                   durationToApply = pt.duration_ms
                   modelToApply = pt.model
+                  completedAtToApply = pt.completed_at
                 }
 
                 // When the parser splits the response into more sub-turns
@@ -1121,12 +1258,19 @@ export function ConversationRuntimeProvider({
                   }
                 }
 
-                if (!usageToApply && !durationToApply && !modelToApply) continue
+                if (
+                  !usageToApply &&
+                  !durationToApply &&
+                  !modelToApply &&
+                  !completedAtToApply
+                )
+                  continue
                 patches.push({
                   index: localAssistantIndices[i],
                   usage: usageToApply,
                   duration_ms: durationToApply,
                   model: modelToApply,
+                  completed_at: completedAtToApply,
                 })
               }
 

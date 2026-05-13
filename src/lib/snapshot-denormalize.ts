@@ -145,5 +145,6 @@ function toolStateToInfo(tc: ToolCallState): ToolCallInfo {
     raw_output_total_bytes: outputBytes,
     locations: tc.locations ?? null,
     meta: tc.meta ?? null,
+    images: tc.images ?? [],
   }
 }

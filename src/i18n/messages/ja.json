@@ -90,9 +90,7 @@
       "placeholder": "ズームレベルを選択",
       "default": "デフォルト",
       "current": "現在のズーム：{zoom}%"
-    },
-    "resetToDefaults": "デフォルトに戻す",
-    "resetHint": "テーマカラーとウィンドウズームをデフォルトに戻します。"
+    }
   },
   "SystemSettings": {
     "loading": "読み込み中...",
@@ -150,6 +148,7 @@
     "updating": "インストール中...",
     "downloading": "ダウンロード中...",
     "upgradeTo": "v{version} にアップグレード",
+    "viewRelease": "v{version} のリリースを表示",
     "foundUpdate": "新しいバージョン v{version} が見つかりました",
     "alreadyLatest": "すでに最新バージョンです",
     "checkUpdateFailed": "更新確認に失敗しました: {message}",
@@ -1754,7 +1753,19 @@
         "copyMessage": "コピー",
         "copied": "コピー済み",
         "downloadImage": "画像をダウンロード",
-        "downloadFailed": "ダウンロードに失敗しました: {message}"
+        "downloadFailed": "ダウンロードに失敗しました: {message}",
+        "imageGeneration": "画像生成",
+        "imageGenerationPending": "画像を生成中…",
+        "imageGenerationFailed": "画像生成に失敗しました",
+        "model": "モデル",
+        "tokenStats": "トークン使用量",
+        "tokenInput": "入力",
+        "tokenOutput": "出力",
+        "tokenCacheRead": "キャッシュ読取",
+        "tokenCacheWrite": "キャッシュ書込",
+        "duration": "所要時間",
+        "completedAt": "完了時刻",
+        "jumpToPreviousUserMessage": "前のユーザーメッセージへ"
       },
       "liveTurnStats": {
         "thinking": "考え中...",
@@ -1875,8 +1886,8 @@
         "toolGroup": {
           "search": "{count} 件を検索",
           "command": "{count} 件のコマンドを実行",
-          "read": "{count} 件のファイルを読み取り",
-          "edit": "{count} 件のファイルを編集",
+          "read": "ファイルを {count} 回読み取り",
+          "edit": "ファイルを {count} 回編集",
           "fetch": "{count} 件のリソースを取得",
           "think": "{count} 回思考",
           "todo": "{count} 件の TODO を更新",
@@ -1992,6 +2003,8 @@
     "sectionDescription": "有効にするとブラウザからCodegにリモートアクセスできます",
     "port": "ポート",
     "status": "ステータス",
+    "autoStart": "自動起動",
+    "autoStartHint": "Codeg の起動時に Web サービスを開始",
     "running": "実行中",
     "stopped": "停止中",
     "processing": "処理中...",
@@ -1999,6 +2012,7 @@
     "stop": "停止",
     "startFailed": "開始に失敗しました",
     "stopFailed": "停止に失敗しました",
+    "saveConfigFailed": "Webサービス設定の保存に失敗しました",
     "open": "開く",
     "hide": "非表示",
     "show": "表示",
@@ -2248,6 +2262,115 @@
       "created": "クイックメッセージを作成しました",
       "saved": "クイックメッセージを保存しました",
       "deleted": "クイックメッセージを削除しました"
+    }
+  },
+  "Pet": {
+    "menu": {
+      "scale": "拡大率",
+      "openManager": "ペット管理",
+      "close": "閉じる"
+    },
+    "loadError": "ペットの読み込みに失敗",
+    "missingPetIdParam": "ペットが選択されていません",
+    "summonButton": "ペット",
+    "manager": {
+      "title": "デスクトップペット",
+      "description": "Codex 互換のスプライトシートで動く、デスクトップ常駐のお供。",
+      "addPet": "ペットを追加",
+      "importFromCodex": "Codex から取り込む",
+      "noPets": "ペットがありません。追加するか、Codex から取り込んでください。",
+      "setActive": "アクティブにする",
+      "active": "アクティブ",
+      "edit": "編集",
+      "delete": "削除",
+      "deleteConfirm": "ペット「{name}」を削除しますか?ディスクからも削除されます。",
+      "summon": "ペットウィンドウを呼び出す",
+      "openCodexHelp": "Codex ペットは ~/.codex/pets/ 配下に配置する必要があります。見つかりません。",
+      "specRequirement": "スプライトシートは 1536x1872 ピクセル、透過 PNG / WebP 形式である必要があります。",
+      "form": {
+        "id": "ペット ID",
+        "idHelp": "英小文字、数字、'-'、'_' のみ。最大 64 文字。",
+        "displayName": "表示名",
+        "description": "説明 (任意)",
+        "spritesheet": "スプライトシート",
+        "chooseFile": "ファイルを選択",
+        "replaceFile": "スプライトを差し替え",
+        "saveCreate": "ペットを追加",
+        "saveUpdate": "変更を保存",
+        "cancel": "キャンセル"
+      },
+      "errors": {
+        "missingId": "ペット ID は必須です",
+        "missingName": "表示名は必須です",
+        "missingSpritesheet": "スプライトシートは必須です",
+        "addFailed": "ペットの追加に失敗しました",
+        "updateFailed": "ペットの更新に失敗しました",
+        "deleteFailed": "ペットの削除に失敗しました",
+        "loadFailed": "ペット一覧の取得に失敗しました",
+        "setActiveFailed": "アクティブなペットの設定に失敗しました",
+        "summonFailed": "ペットウィンドウの召喚に失敗しました"
+      }
+    },
+    "import": {
+      "title": "Codex から取り込む",
+      "subtitle": "~/.codex/pets/ 配下に見つかったペット一覧。",
+      "selectAll": "すべて選択",
+      "alreadyImported": "取り込み済み",
+      "renameOnConflict": "ID が重複した場合は -imported を付与",
+      "import": "選択したものを取り込む",
+      "noneFound": "取り込み可能な Codex ペットが見つかりません。",
+      "imported": "取り込みに成功",
+      "failed": "取り込みに失敗",
+      "close": "閉じる"
+    },
+    "marketplace": {
+      "openMarketplace": "ペットマーケット",
+      "title": "ペットマーケット",
+      "search": "ペットを検索",
+      "kindFilter": {
+        "all": "すべて",
+        "object": "オブジェクト",
+        "animal": "動物",
+        "person": "人物",
+        "creature": "生き物"
+      },
+      "sortFilter": {
+        "latest": "新着",
+        "popular": "人気",
+        "views": "閲覧数順"
+      },
+      "refresh": "更新",
+      "install": "インストール",
+      "installing": "インストール中",
+      "reinstall": "再インストール",
+      "reinstallConfirm": "ローカルのペット \"{name}\" を上書きしますか？既存のデータは置き換えられます。",
+      "cancel": "キャンセル",
+      "stats": {
+        "views": "閲覧",
+        "downloads": "ダウンロード",
+        "likes": "いいね"
+      },
+      "actions": {
+        "idle": "待機",
+        "running_right": "右走り",
+        "running_left": "左走り",
+        "waving": "手振り",
+        "jumping": "ジャンプ",
+        "failed": "失敗",
+        "waiting": "待ち",
+        "running": "実行",
+        "review": "レビュー"
+      },
+      "page": "{page} / {total} ページ",
+      "prev": "前へ",
+      "next": "次へ",
+      "empty": "条件に一致するペットがありません。",
+      "successInstalled": "\"{name}\" をインストールしました",
+      "errors": {
+        "loadFailed": "マーケットの読み込みに失敗しました",
+        "installFailed": "インストールに失敗しました",
+        "alreadyInstalled": "そのペットは既に存在します"
+      }
     }
   }
 }

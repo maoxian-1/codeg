@@ -73,6 +73,17 @@ export interface AgentExecutionStats {
   tool_calls?: AgentToolCall[]
 }
 
+/**
+ * Image payload shared across `ContentBlock::Image` /
+ * `ContentBlock::ImageGeneration` / ACP wire `ToolCallImageInfo`. Mirror of
+ * Rust `models::message::ImageData`.
+ */
+export interface ImageData {
+  data: string
+  mime_type: string
+  uri?: string | null
+}
+
 export type ContentBlock =
   | { type: "text"; text: string }
   | {
@@ -80,6 +91,29 @@ export type ContentBlock =
       data: string
       mime_type: string
       uri?: string | null
+    }
+  | {
+      /**
+       * codex-acp v0.14+ image generation. Distinct from `image` because
+       * codex-acp positions image generation as a first-class
+       * `ToolCall(title="Image generation")` carrying revised_prompt + image.
+       * Rendered with the dedicated `<GeneratedImagesBlock>` component, not
+       * mixed with regular tool-call cards.
+       *
+       * Singular `image` (not array): codex-acp emits exactly one image per
+       * `ToolCall`. Multi-image turns produce N separate ToolCalls. `null`
+       * during the in-flight placeholder window between
+       * `ImageGenerationBegin` and `ImageGenerationEnd`.
+       *
+       * `status` mirrors the underlying ToolCallStatus during live streaming
+       * so the renderer can distinguish in-flight vs. failed when no image
+       * arrives. Absent on Rust-emitted blocks (JSONL replay only emits
+       * blocks with a present image, so absence is treated as success).
+       */
+      type: "image_generation"
+      revised_prompt?: string | null
+      image?: ImageData | null
+      status?: ToolCallStatus | null
     }
   | {
       type: "tool_use"
@@ -122,6 +156,12 @@ export interface MessageTurn {
   usage?: TurnUsage | null
   duration_ms?: number | null
   model?: string | null
+  /** Wall-clock completion time (ISO). Each Rust parser sets this to its
+   * own end-marker (e.g. OpenCode's `time.completed`, or just the event-log
+   * `timestamp` for agents that log post-generation). Notably this is NOT
+   * `timestamp + duration_ms` — those two fields encode unrelated spans in
+   * most parsers. */
+  completed_at?: string | null
 }
 
 export interface ConversationDetail {
@@ -394,6 +434,17 @@ export interface SessionUsageUpdateInfo {
   size: number
 }
 
+/**
+ * Wire-level image attached to a tool call (e.g. codex image generation).
+ * Mirrors Rust's `ToolCallImageInfo`. Reused by snapshot endpoints and
+ * live `tool_call(_update)` events.
+ */
+export interface ToolCallImageWire {
+  data: string
+  mime_type: string
+  uri?: string | null
+}
+
 // ACP events pushed from Rust backend (discriminated by "type" field)
 export type AcpEvent =
   | { type: "content_delta"; text: string }
@@ -414,6 +465,8 @@ export type AcpEvent =
       raw_output: string | null
       locations?: unknown
       meta?: unknown
+      /** Present iff agent attached images (e.g. codex-acp v0.14+ image gen). */
+      images?: ToolCallImageWire[]
     }
   | {
       type: "tool_call_update"
@@ -426,6 +479,12 @@ export type AcpEvent =
       raw_output_append?: boolean
       locations?: unknown
       meta?: unknown
+      /**
+       * Wire-level partial update: present means "replace prior images with
+       * this vec", absent means "preserve prior images". Mirrors the
+       * `Option<Vec<...>>` semantics on the Rust side.
+       */
+      images?: ToolCallImageWire[]
     }
   | {
       type: "permission_request"
@@ -557,6 +616,12 @@ export interface ToolCallState {
   locations: unknown | null
   /** ACP extensibility metadata. Opaque pass-through. */
   meta: Record<string, unknown> | null
+  /**
+   * Images attached to this tool call (e.g. codex-acp v0.14+ image gen).
+   * Persisted on the snapshot so a frontend reconnecting mid-turn / after
+   * refresh sees the same image. May be absent on older snapshots.
+   */
+  images?: ToolCallImageWire[]
 }
 
 export type LiveContentBlock =

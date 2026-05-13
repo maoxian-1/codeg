@@ -37,6 +37,7 @@ import {
   ReasoningContent,
 } from "@/components/ai-elements/reasoning"
 import { AgentToolCallPart } from "./agent-tool-call"
+import { GeneratedImagesBlock } from "./generated-images-block"
 import {
   FileTextIcon,
   FilePenLineIcon,
@@ -2545,6 +2546,17 @@ export const ContentPartsRenderer = memo(function ContentPartsRenderer({
 
         if (part.type === "reasoning") {
           return <ReasoningPart key={`reasoning-${i}`} part={part} />
+        }
+
+        if (part.type === "generated-image") {
+          return (
+            <GeneratedImagesBlock
+              key={`gimg-${i}`}
+              revisedPrompt={part.revisedPrompt}
+              image={part.image}
+              status={part.status}
+            />
+          )
         }
 
         return null

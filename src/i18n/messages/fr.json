@@ -90,9 +90,7 @@
       "placeholder": "Sélectionnez le niveau de zoom",
       "default": "Par défaut",
       "current": "Zoom actuel : {zoom}%"
-    },
-    "resetToDefaults": "Réinitialiser",
-    "resetHint": "Réinitialise la couleur du thème et le zoom de la fenêtre."
+    }
   },
   "SystemSettings": {
     "loading": "Chargement...",
@@ -150,6 +148,7 @@
     "updating": "Installation...",
     "downloading": "Téléchargement...",
     "upgradeTo": "Mettre à jour vers v{version}",
+    "viewRelease": "Voir la version v{version}",
     "foundUpdate": "Nouvelle version v{version} trouvée",
     "alreadyLatest": "Vous utilisez déjà la dernière version",
     "checkUpdateFailed": "Échec de la recherche de mises à jour : {message}",
@@ -1754,7 +1753,19 @@
         "copyMessage": "Copier",
         "copied": "Copié",
         "downloadImage": "Télécharger l'image",
-        "downloadFailed": "Échec du téléchargement : {message}"
+        "downloadFailed": "Échec du téléchargement : {message}",
+        "imageGeneration": "Génération d'image",
+        "imageGenerationPending": "Génération de l'image…",
+        "imageGenerationFailed": "Échec de la génération d'image",
+        "model": "Modèle",
+        "tokenStats": "Utilisation des tokens",
+        "tokenInput": "Entrée",
+        "tokenOutput": "Sortie",
+        "tokenCacheRead": "Lecture du cache",
+        "tokenCacheWrite": "Écriture du cache",
+        "duration": "Durée",
+        "completedAt": "Terminé à",
+        "jumpToPreviousUserMessage": "Aller au message utilisateur"
       },
       "liveTurnStats": {
         "thinking": "Réflexion...",
@@ -1875,8 +1886,8 @@
         "toolGroup": {
           "search": "{count, plural, one {A exploré # recherche} other {A exploré # recherches}}",
           "command": "{count, plural, one {A exécuté # commande} other {A exécuté # commandes}}",
-          "read": "{count, plural, one {A lu # fichier} other {A lu # fichiers}}",
-          "edit": "{count, plural, one {A modifié # fichier} other {A modifié # fichiers}}",
+          "read": "{count, plural, one {A lu des fichiers # fois} other {A lu des fichiers # fois}}",
+          "edit": "{count, plural, one {A modifié des fichiers # fois} other {A modifié des fichiers # fois}}",
           "fetch": "{count, plural, one {A récupéré # ressource} other {A récupéré # ressources}}",
           "think": "{count, plural, one {A réfléchi # fois} other {A réfléchi # fois}}",
           "todo": "{count, plural, one {A mis à jour # tâche} other {A mis à jour # tâches}}",
@@ -1992,6 +2003,8 @@
     "sectionDescription": "Activer pour accéder à Codeg à distance via le navigateur",
     "port": "Port",
     "status": "Statut",
+    "autoStart": "Démarrage auto",
+    "autoStartHint": "Démarrer le service Web au lancement de Codeg",
     "running": "En cours",
     "stopped": "Arrêté",
     "processing": "Traitement...",
@@ -1999,6 +2012,7 @@
     "stop": "Arrêter",
     "startFailed": "Échec du démarrage",
     "stopFailed": "Échec de l'arrêt",
+    "saveConfigFailed": "Échec de l'enregistrement des paramètres du service Web",
     "open": "Ouvrir",
     "hide": "Masquer",
     "show": "Afficher",
@@ -2248,6 +2262,115 @@
       "created": "Message rapide créé",
       "saved": "Message rapide enregistré",
       "deleted": "Message rapide supprimé"
+    }
+  },
+  "Pet": {
+    "menu": {
+      "scale": "Échelle",
+      "openManager": "Gérer les mascottes",
+      "close": "Fermer"
+    },
+    "loadError": "Échec du chargement de la mascotte",
+    "missingPetIdParam": "Aucune mascotte sélectionnée",
+    "summonButton": "Mascotte",
+    "manager": {
+      "title": "Mascottes",
+      "description": "Compagnons flottants de bureau avec des sprites compatibles Codex.",
+      "addPet": "Ajouter une mascotte",
+      "importFromCodex": "Importer depuis Codex",
+      "noPets": "Aucune mascotte. Ajoutez-en ou importez depuis Codex.",
+      "setActive": "Activer",
+      "active": "Active",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer la mascotte « {name} » ? Elle sera retirée du disque.",
+      "summon": "Invoquer la fenêtre de la mascotte",
+      "openCodexHelp": "Les mascottes Codex doivent être dans ~/.codex/pets/. Aucune trouvée.",
+      "specRequirement": "Le sprite doit être un PNG/WebP 1536x1872 avec transparence.",
+      "form": {
+        "id": "ID mascotte",
+        "idHelp": "Lettres minuscules, chiffres, '-' et '_'. Max 64 caractères.",
+        "displayName": "Nom affiché",
+        "description": "Description (facultative)",
+        "spritesheet": "Sprite",
+        "chooseFile": "Choisir un fichier",
+        "replaceFile": "Remplacer le sprite",
+        "saveCreate": "Ajouter la mascotte",
+        "saveUpdate": "Enregistrer",
+        "cancel": "Annuler"
+      },
+      "errors": {
+        "missingId": "ID requis",
+        "missingName": "Nom requis",
+        "missingSpritesheet": "Sprite requis",
+        "addFailed": "Ajout impossible",
+        "updateFailed": "Mise à jour impossible",
+        "deleteFailed": "Suppression impossible",
+        "loadFailed": "Chargement impossible",
+        "setActiveFailed": "Activation impossible",
+        "summonFailed": "Ouverture de la fenêtre impossible"
+      }
+    },
+    "import": {
+      "title": "Importer depuis Codex",
+      "subtitle": "Mascottes disponibles sous ~/.codex/pets/.",
+      "selectAll": "Tout sélectionner",
+      "alreadyImported": "Déjà importée",
+      "renameOnConflict": "Renommer en -imported en cas de conflit",
+      "import": "Importer la sélection",
+      "noneFound": "Aucune mascotte Codex importable.",
+      "imported": "Import réussi",
+      "failed": "Import échoué",
+      "close": "Fermer"
+    },
+    "marketplace": {
+      "openMarketplace": "Marketplace de mascottes",
+      "title": "Marketplace de mascottes",
+      "search": "Rechercher des mascottes",
+      "kindFilter": {
+        "all": "Toutes",
+        "object": "Objet",
+        "animal": "Animal",
+        "person": "Personne",
+        "creature": "Créature"
+      },
+      "sortFilter": {
+        "latest": "Récents",
+        "popular": "Populaires",
+        "views": "Vues"
+      },
+      "refresh": "Actualiser",
+      "install": "Installer",
+      "installing": "Installation",
+      "reinstall": "Réinstaller",
+      "reinstallConfirm": "Remplacer la mascotte locale « {name} » ? Les données existantes seront écrasées.",
+      "cancel": "Annuler",
+      "stats": {
+        "views": "Vues",
+        "downloads": "Téléchargements",
+        "likes": "J’aime"
+      },
+      "actions": {
+        "idle": "Repos",
+        "running_right": "Course dr.",
+        "running_left": "Course g.",
+        "waving": "Salut",
+        "jumping": "Saut",
+        "failed": "Échec",
+        "waiting": "Attente",
+        "running": "Course",
+        "review": "Revue"
+      },
+      "page": "Page {page} sur {total}",
+      "prev": "Précédent",
+      "next": "Suivant",
+      "empty": "Aucune mascotte ne correspond.",
+      "successInstalled": "« {name} » installée",
+      "errors": {
+        "loadFailed": "Impossible de charger le marketplace",
+        "installFailed": "Échec de l’installation",
+        "alreadyInstalled": "La mascotte existe déjà localement"
+      }
     }
   }
 }

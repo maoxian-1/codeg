@@ -34,7 +34,10 @@ function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0 rounded-2xl max-w-lg md:max-w-xl lg:max-w-2xl">
+      <DialogContent
+        className="overflow-hidden p-0 rounded-2xl max-w-lg md:max-w-xl lg:max-w-2xl"
+        closeButtonClassName="top-1.5 z-10"
+      >
         <VisuallyHidden.Root>
           <DialogTitle>{title}</DialogTitle>
         </VisuallyHidden.Root>

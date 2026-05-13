@@ -1,3 +1,5 @@
+use sea_orm::DatabaseConnection;
+
 use crate::app_error::AppCommandError;
 use crate::models::SystemProxySettings;
 
@@ -39,6 +41,30 @@ pub fn clear_proxy_env() {
     for key in PROXY_ENV_KEYS {
         unsafe {
             std::env::remove_var(key);
+        }
+    }
+}
+
+/// Load persisted proxy settings from the DB and apply them to process env.
+/// Must run before the first reqwest client is built — otherwise that client
+/// caches the proxy-less config and ignores the user's choice for its lifetime.
+/// Errors are logged and dropped: a misconfigured proxy must not block startup.
+///
+/// Only writes env vars when the DB explicitly stores `enabled=true`. A fresh
+/// install or an explicit disable in the UI leaves externally-set HTTP_PROXY
+/// alone, so docker `-e` and systemd `Environment=` keep working. Runtime
+/// disable through `update_system_proxy_settings` still clears env — that path
+/// is the user's explicit intent, not a default.
+pub async fn init_proxy_from_db(conn: &DatabaseConnection) {
+    match crate::commands::system_settings::load_system_proxy_settings(conn).await {
+        Ok(settings) if settings.enabled => {
+            if let Err(err) = apply_system_proxy_settings(&settings) {
+                eprintln!("[Settings] failed to apply system proxy settings: {err}");
+            }
+        }
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("[Settings] failed to load system proxy settings: {err}");
         }
     }
 }

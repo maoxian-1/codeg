@@ -52,11 +52,11 @@ pub(crate) fn prepare_credential_env(
         "GIT_CONFIG_KEY_0".to_string(),
         "credential.helper".to_string(),
     );
-    // The '!' prefix tells git to run as a raw shell command (not git-credential-<name>).
-    // Paths with spaces (e.g. "Application Support") must be quoted.
+    // The '!' prefix tells git to run the rest as `sh -c <value>`. Single-quote
+    // the path so spaces, `$`, backticks, etc. don't get re-interpreted by sh.
     env.insert(
         "GIT_CONFIG_VALUE_0".to_string(),
-        format!("!\"{}\"", helper_path_str),
+        format!("!{}", git_credential::sh_single_quote(&helper_path_str)),
     );
 
     Some(env)

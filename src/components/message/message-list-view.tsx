@@ -16,7 +16,6 @@ import { TurnStats } from "./turn-stats"
 import { LiveTurnStats } from "./live-turn-stats"
 import { UserResourceLinks } from "./user-resource-links"
 import { UserImageAttachments } from "./user-image-attachments"
-import { AssistantImageAttachments } from "./assistant-image-attachments"
 import { useSessionStats } from "@/contexts/session-stats-context"
 import { AgentPlanOverlay } from "@/components/chat/agent-plan-overlay"
 import {
@@ -78,11 +77,17 @@ interface ResolvedMessageGroup {
   parts: AdaptedContentPart[]
   resources: UserResourceDisplay[]
   images: UserImageDisplay[]
-  assistantImages: UserImageDisplay[]
   usage?: import("@/lib/types").TurnUsage | null
   duration_ms?: number | null
   model?: string | null
   models?: string[]
+  /**
+   * Wall-clock completion time supplied by the Rust parser. For merged
+   * sub-turns this reflects the last sub-turn's completion (inherited
+   * automatically via `{ ...last.group }`), not first-start + accumulated
+   * duration.
+   */
+  completed_at?: string | null
 }
 
 type ThreadRenderItem =
@@ -93,6 +98,7 @@ type ThreadRenderItem =
       phase: "persisted" | "optimistic" | "streaming"
       showStats: boolean
       isRoleTransition: boolean
+      previousUserIndex: number | null
     }
   | {
       key: string
@@ -149,7 +155,6 @@ function isEmptyTurnItem(item: ThreadRenderItem): boolean {
   if (g.parts.length > 0) return false
   if (g.resources.length > 0) return false
   if (g.images.length > 0) return false
-  if (g.assistantImages.length > 0) return false
   return true
 }
 
@@ -182,9 +187,6 @@ function mergeConsecutiveAssistantTurns(
       const mergedParts = mergeAdjacentToolGroups(allParts)
       const last = buffer[buffer.length - 1]
       const first = buffer[0]
-      const mergedAssistantImages = buffer.flatMap(
-        (it) => it.group.assistantImages
-      )
 
       // Aggregate stats across the merged sub-turns so the post-stream
       // stats row reflects the whole assistant response, not just the
@@ -228,7 +230,6 @@ function mergeConsecutiveAssistantTurns(
           ...last.group,
           id: first.group.id,
           parts: mergedParts,
-          assistantImages: mergedAssistantImages,
           usage: mergedUsage,
           duration_ms: mergedDuration,
           model: mergedModels[0] ?? last.group.model,
@@ -312,10 +313,14 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
   group,
   dimmed = false,
   showStats = true,
+  previousUserIndex = null,
+  isResponseComplete = true,
 }: {
   group: ResolvedMessageGroup
   dimmed?: boolean
   showStats?: boolean
+  previousUserIndex?: number | null
+  isResponseComplete?: boolean
 }) {
   if (group.role === "system") {
     return <CollapsibleSystemMessage group={group} />
@@ -326,12 +331,6 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
       <Message from={group.role}>
         {group.role === "user" && group.images.length > 0 ? (
           <UserImageAttachments images={group.images} className="self-end" />
-        ) : null}
-        {group.role === "assistant" && group.assistantImages.length > 0 ? (
-          <AssistantImageAttachments
-            images={group.assistantImages}
-            className="self-start"
-          />
         ) : null}
         {group.role === "user" ? (
           <div className="group/user-msg flex w-fit ml-auto max-w-full items-start gap-1">
@@ -355,6 +354,10 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
           duration_ms={group.duration_ms}
           model={group.model}
           models={group.models}
+          previousUserIndex={previousUserIndex}
+          isResponseComplete={isResponseComplete}
+          copyText={extractTextFromParts(group.parts)}
+          completedAt={group.completed_at}
         />
       )}
     </div>
@@ -496,10 +499,10 @@ export function MessageListView({
           parts: msg.content,
           resources: msg.userResources ?? [],
           images: msg.userImages ?? [],
-          assistantImages: msg.assistantImages ?? [],
           usage: msg.usage,
           duration_ms: msg.duration_ms,
           model: msg.model,
+          completed_at: msg.completed_at,
         }
         groupCache.set(msg, group)
       }
@@ -514,6 +517,7 @@ export function MessageListView({
         phase,
         showStats: false,
         isRoleTransition: false,
+        previousUserIndex: null,
       }
     })
 
@@ -521,7 +525,10 @@ export function MessageListView({
     // turn, so tool-groups straddling a turn boundary fold into one collapsible.
     const items = mergeConsecutiveAssistantTurns(rawItems)
 
-    // Compute showStats and isRoleTransition for each turn item
+    // Compute showStats, isRoleTransition, and previousUserIndex for each turn.
+    // previousUserIndex points at the closest preceding user turn (used by the
+    // post-stream stats row's "jump to previous user message" button).
+    let lastUserIdx: number | null = null
     for (let idx = 0; idx < items.length; idx++) {
       const item = items[idx]
       if (item.kind !== "turn") continue
@@ -534,11 +541,16 @@ export function MessageListView({
         }
       }
 
+      if (item.group.role === "user") {
+        lastUserIdx = idx
+      }
+
       // showStats: only on the last assistant turn before a non-assistant or end
       if (item.group.role === "assistant") {
         const next = items[idx + 1]
         if (!next || next.kind !== "turn" || next.group.role !== "assistant") {
           item.showStats = true
+          item.previousUserIndex = lastUserIdx
         }
       }
     }
@@ -580,6 +592,8 @@ export function MessageListView({
               group={item.group}
               dimmed={item.phase === "optimistic"}
               showStats={item.showStats}
+              previousUserIndex={item.previousUserIndex}
+              isResponseComplete={item.phase === "persisted"}
             />
           </div>
         )

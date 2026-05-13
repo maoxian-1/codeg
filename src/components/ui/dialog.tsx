@@ -2,7 +2,9 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
+import { XIcon } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 function Dialog({
@@ -48,8 +50,13 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  closeButtonClassName,
+  showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  closeButtonClassName?: string
+  showCloseButton?: boolean
+}) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -57,12 +64,28 @@ function DialogContent({
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
-            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-border pointer-events-auto grid max-h-[calc(100dvh-2rem)] w-full max-w-md gap-6 overflow-y-auto rounded-4xl p-6 shadow-2xl ring-1 duration-100 outline-none",
+            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-border pointer-events-auto relative grid max-h-[calc(100dvh-2rem)] w-full max-w-md gap-6 overflow-y-auto rounded-4xl p-6 shadow-2xl ring-1 duration-100 outline-none",
+            showCloseButton && "[&_[data-slot=dialog-header]]:pr-10",
             className
           )}
           {...props}
         >
           {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close data-slot="dialog-close" asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "absolute top-4 right-4 hover:text-destructive focus-visible:text-destructive",
+                  closeButtonClassName
+                )}
+              >
+                <XIcon />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogPrimitive.Close>
+          )}
         </DialogPrimitive.Content>
       </div>
     </DialogPortal>

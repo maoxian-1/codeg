@@ -5,6 +5,7 @@ import { Coins } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useSessionStats } from "@/contexts/session-stats-context"
 import { useConnectionStore } from "@/contexts/acp-connections-context"
+import { formatTokenCount } from "@/lib/token-format"
 import {
   Popover,
   PopoverContent,
@@ -15,16 +16,6 @@ const ICON_RADIUS = 6
 const ICON_CENTER = 8
 const ICON_VIEWBOX = 16
 const ICON_CIRCUMFERENCE = 2 * Math.PI * ICON_RADIUS
-
-function formatTokenCount(n: number): string {
-  if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-  }
-  if (n >= 1_000) {
-    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`
-  }
-  return n.toLocaleString()
-}
 
 function formatPercent(percent: number | null): string {
   if (percent == null) return "--"

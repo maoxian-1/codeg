@@ -684,6 +684,10 @@ impl CodexParser {
         let mut close_agent_targets: HashMap<String, String> = HashMap::new();
         let mut active_agent_count: u32 = 0;
         let mut call_id_tool_names: HashMap<String, String> = HashMap::new();
+        // Codex 0.129+ writes a generated image both as `event_msg.image_generation_end`
+        // and as `response_item.image_generation_call`, sharing the same call_id/id.
+        // Emit at most one ContentBlock::Image per id to avoid duplicate display.
+        let mut emitted_image_ids: HashSet<String> = HashSet::new();
 
         for line in reader.lines() {
             let line = match line {
@@ -806,6 +810,7 @@ impl CodexParser {
                                     usage: None,
                                     duration_ms: None,
                                     model: None,
+                                    completed_at: Some(timestamp),
                                 });
                             }
                             "agent_message" => {
@@ -823,6 +828,7 @@ impl CodexParser {
                                         usage: None,
                                         duration_ms: None,
                                         model: None,
+                                        completed_at: Some(timestamp),
                                     });
                                 }
                             }
@@ -842,35 +848,65 @@ impl CodexParser {
                                             usage: None,
                                             duration_ms: None,
                                             model: None,
+                                            completed_at: Some(timestamp),
                                         });
                                     }
                                 }
                             }
                             "image_generation_end" => {
-                                if active_agent_count == 0 {
-                                    let result = payload
-                                        .get("result")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    if !result.is_empty() {
-                                        let uri = payload
-                                            .get("saved_path")
-                                            .and_then(|v| v.as_str())
-                                            .map(|s| s.to_string());
-                                        messages.push(UnifiedMessage {
-                                            id: format!("assistant-image-{}", messages.len()),
-                                            role: MessageRole::Assistant,
-                                            content: vec![ContentBlock::Image {
-                                                data: result.to_string(),
-                                                mime_type: "image/png".to_string(),
-                                                uri,
-                                            }],
-                                            timestamp,
-                                            usage: None,
-                                            duration_ms: None,
-                                            model: None,
-                                        });
-                                    }
+                                if active_agent_count > 0 {
+                                    continue;
+                                }
+                                let call_id = payload
+                                    .get("call_id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let result = payload
+                                    .get("result")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if result.is_empty() {
+                                    continue;
+                                }
+                                if !call_id.is_empty()
+                                    && emitted_image_ids.contains(&call_id)
+                                {
+                                    continue;
+                                }
+                                let mime_type = payload
+                                    .get("mime_type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("image/png")
+                                    .to_string();
+                                let uri = payload
+                                    .get("saved_path")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+                                let revised_prompt = payload
+                                    .get("revised_prompt")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .filter(|s| !s.trim().is_empty());
+                                messages.push(UnifiedMessage {
+                                    id: format!("assistant-imagegen-{}", messages.len()),
+                                    role: MessageRole::Assistant,
+                                    content: vec![ContentBlock::ImageGeneration {
+                                        revised_prompt,
+                                        image: Some(ImageData {
+                                            data: result.to_string(),
+                                            mime_type,
+                                            uri,
+                                        }),
+                                    }],
+                                    timestamp,
+                                    usage: None,
+                                    duration_ms: None,
+                                    model: None,
+                                    completed_at: Some(timestamp),
+                                });
+                                if !call_id.is_empty() {
+                                    emitted_image_ids.insert(call_id);
                                 }
                             }
                             "token_count" => {
@@ -1002,6 +1038,7 @@ impl CodexParser {
                                             usage: None,
                                             duration_ms: None,
                                             model: None,
+                                            completed_at: Some(timestamp),
                                         });
                                     }
                                     "wait_agent" => {
@@ -1061,6 +1098,7 @@ impl CodexParser {
                                             usage: None,
                                             duration_ms: None,
                                             model: None,
+                                            completed_at: Some(timestamp),
                                         });
                                     }
                                 }
@@ -1106,6 +1144,7 @@ impl CodexParser {
                                         usage: None,
                                         duration_ms: None,
                                         model: None,
+                                        completed_at: Some(timestamp),
                                     });
                                 } else if is_wait {
                                     if let Some(output_obj) = parse_codex_json_output(payload) {
@@ -1172,6 +1211,7 @@ impl CodexParser {
                                         usage: None,
                                         duration_ms: None,
                                         model: None,
+                                        completed_at: Some(timestamp),
                                     });
                                 }
                             }
@@ -1206,8 +1246,68 @@ impl CodexParser {
                                             usage: None,
                                             duration_ms: None,
                                             model: None,
+                                            completed_at: Some(timestamp),
                                         });
                                     }
+                                }
+                            }
+                            "image_generation_call" => {
+                                // codex 0.129+ writes the same generated image as both an
+                                // `event_msg.image_generation_end` (earlier in the file) and
+                                // a `response_item.image_generation_call` (here). They share
+                                // the same id; emit at most once via emitted_image_ids.
+                                // Subagent suppression mirrors the event_msg arm: parent
+                                // timeline must not host children's generated images.
+                                if active_agent_count > 0 {
+                                    continue;
+                                }
+                                let id = payload
+                                    .get("id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                if !id.is_empty() && emitted_image_ids.contains(&id) {
+                                    continue;
+                                }
+                                let result = payload
+                                    .get("result")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if result.is_empty() {
+                                    continue;
+                                }
+                                let mime_type = payload
+                                    .get("mime_type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("image/png")
+                                    .to_string();
+                                let revised_prompt = payload
+                                    .get("revised_prompt")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .filter(|s| !s.trim().is_empty());
+                                messages.push(UnifiedMessage {
+                                    id: format!("assistant-imagegen-{}", messages.len()),
+                                    role: MessageRole::Assistant,
+                                    content: vec![ContentBlock::ImageGeneration {
+                                        revised_prompt,
+                                        image: Some(ImageData {
+                                            data: result.to_string(),
+                                            mime_type,
+                                            // response_item.image_generation_call has no
+                                            // saved_path; event_msg.image_generation_end is
+                                            // the only carrier of the on-disk file URI.
+                                            uri: None,
+                                        }),
+                                    }],
+                                    timestamp,
+                                    usage: None,
+                                    duration_ms: None,
+                                    model: None,
+                                    completed_at: Some(timestamp),
+                                });
+                                if !id.is_empty() {
+                                    emitted_image_ids.insert(id);
                                 }
                             }
                             _ => {}
@@ -1661,6 +1761,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else if matches!(msg.role, MessageRole::System) {
@@ -1672,6 +1773,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else {
@@ -1681,6 +1783,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
             let mut duration_ms = msg.duration_ms;
             let mut turn_model = msg.model.clone();
             let timestamp = msg.timestamp;
+            let mut completed_at = msg.completed_at;
             i += 1;
 
             // Only absorb immediately following Tool messages
@@ -1696,6 +1799,9 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 if turn_model.is_none() {
                     turn_model = messages[i].model.clone();
                 }
+                if messages[i].completed_at.is_some() {
+                    completed_at = messages[i].completed_at;
+                }
                 i += 1;
             }
 
@@ -1707,6 +1813,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage,
                 duration_ms,
                 model: turn_model,
+                completed_at,
             });
         }
     }
@@ -1726,8 +1833,10 @@ mod tests {
     use super::should_skip_duplicate_user_message;
     use super::strip_blocked_resource_mentions;
     use super::CodexParser;
-    use crate::models::{ContentBlock, MessageRole, SessionStats, TurnUsage, UnifiedMessage};
-    use chrono::{Duration, Utc};
+    use crate::models::{
+        ContentBlock, MessageRole, SessionStats, TurnRole, TurnUsage, UnifiedMessage,
+    };
+    use chrono::{DateTime, Duration, Utc};
     use std::env;
     use std::fs;
     use std::path::PathBuf;
@@ -1810,6 +1919,7 @@ mod tests {
             usage: None,
             duration_ms: None,
             model: None,
+            completed_at: Some(now),
         }];
 
         assert!(should_skip_duplicate_user_message(
@@ -2005,6 +2115,54 @@ mod tests {
     }
 
     #[test]
+    fn parse_detail_completion_time_uses_agent_message_timestamp_not_added_turn_span() {
+        // Regression: in Codex `duration_ms` is computed from the
+        // turn_context → token_count span, while `timestamp` on the
+        // assistant `UnifiedMessage` is the agent_message event time
+        // (already near turn end). Adding them double-counts the entire
+        // turn span. completed_at must reflect the agent_message arrival.
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time ok")
+            .as_nanos();
+        let path: PathBuf = env::temp_dir().join(format!("codeg-codex-completed-{nanos}.jsonl"));
+
+        let content = concat!(
+            "{\"timestamp\":\"2026-03-01T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"completed-1\",\"cwd\":\"/tmp/demo\"}}\n",
+            // Turn starts here.
+            "{\"timestamp\":\"2026-03-01T10:00:00.522Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5-codex\"}}\n",
+            // Assistant message arrives ~9.5s into the turn.
+            "{\"timestamp\":\"2026-03-01T10:00:10.081Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"message\":\"done\"}}\n",
+            // token_count fires shortly after, bringing duration_ms = 9.7s.
+            "{\"timestamp\":\"2026-03-01T10:00:10.268Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"total_tokens\":100,\"input_tokens\":80,\"cached_input_tokens\":0,\"output_tokens\":20},\"last_token_usage\":{\"input_tokens\":80,\"cached_input_tokens\":0,\"output_tokens\":20,\"total_tokens\":100},\"model_context_window\":258400}}}\n"
+        );
+        fs::write(&path, content).expect("write test jsonl");
+
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "completed-1")
+            .expect("parse detail ok");
+
+        let assistant = detail
+            .turns
+            .iter()
+            .find(|t| matches!(t.role, TurnRole::Assistant))
+            .expect("assistant turn");
+        let completed_at = assistant.completed_at.expect("completed_at populated");
+        let expected = "2026-03-01T10:00:10.081Z"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(completed_at, expected);
+        // The naive `timestamp + duration_ms` would produce ~10.00:19.827Z.
+        let wrong = "2026-03-01T10:00:19.827Z"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_ne!(completed_at, wrong);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn codex_home_env_overrides_default_home() {
         let resolved = resolve_codex_home_dir_from(
             Some(std::ffi::OsString::from("/tmp/custom-codex-home")),
@@ -2017,5 +2175,261 @@ mod tests {
     fn codex_home_defaults_to_home_dot_codex() {
         let resolved = resolve_codex_home_dir_from(None, Some(PathBuf::from("/Users/default")));
         assert_eq!(resolved, PathBuf::from("/Users/default/.codex"));
+    }
+
+    /// codex 0.129+ writes a generated image both as `event_msg.image_generation_end`
+    /// and `response_item.image_generation_call`, sharing the same call_id/id.
+    /// The parser must surface exactly one ContentBlock::ImageGeneration per id.
+    #[test]
+    fn image_generation_end_and_call_dedupe_by_id() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time ok")
+            .as_nanos();
+        let path: PathBuf = env::temp_dir().join(format!("codeg-codex-img-dedupe-{nanos}.jsonl"));
+
+        let content = concat!(
+            "{\"timestamp\":\"2026-05-05T12:35:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"ig-test\",\"cwd\":\"/tmp/demo\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"draw a cat\"}]}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:17Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_abc\",\"status\":\"generating\",\"revised_prompt\":\"a fluffy ginger kitten\",\"result\":\"AAAA_BASE64\",\"saved_path\":\"/tmp/cat.png\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:18Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"image_generation_call\",\"id\":\"ig_abc\",\"status\":\"generating\",\"revised_prompt\":\"a fluffy ginger kitten\",\"result\":\"AAAA_BASE64\"}}\n"
+        );
+        fs::write(&path, content).expect("write test jsonl");
+
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "ig-test")
+            .expect("parse ok");
+
+        let imagegen_blocks: Vec<&ContentBlock> = detail
+            .turns
+            .iter()
+            .flat_map(|t| t.blocks.iter())
+            .filter(|b| matches!(b, ContentBlock::ImageGeneration { .. }))
+            .collect();
+        assert_eq!(
+            imagegen_blocks.len(),
+            1,
+            "Same image must appear once across event_msg.image_generation_end + response_item.image_generation_call (got {} image-generation blocks)",
+            imagegen_blocks.len()
+        );
+        // The first emit (event_msg.image_generation_end) wins, so saved_path
+        // and revised_prompt are preserved.
+        match imagegen_blocks[0] {
+            ContentBlock::ImageGeneration {
+                revised_prompt,
+                image,
+            } => {
+                assert_eq!(revised_prompt.as_deref(), Some("a fluffy ginger kitten"));
+                let image = image.as_ref().expect("image present on completed event");
+                assert_eq!(image.data, "AAAA_BASE64");
+                assert_eq!(image.mime_type, "image/png");
+                assert_eq!(image.uri.as_deref(), Some("/tmp/cat.png"));
+            }
+            other => panic!("expected ContentBlock::ImageGeneration, got {other:?}"),
+        }
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// `event_msg.image_generation_end` ought to honor an explicit `mime_type`
+    /// field when codex writes one (defensive fallback to image/png otherwise).
+    #[test]
+    fn image_generation_end_honors_explicit_mime_type() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time ok")
+            .as_nanos();
+        let path: PathBuf = env::temp_dir().join(format!("codeg-codex-img-mime-{nanos}.jsonl"));
+
+        let content = concat!(
+            "{\"timestamp\":\"2026-05-05T12:35:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"ig-mime\",\"cwd\":\"/tmp/demo\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\"}]}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:17Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_jpeg\",\"status\":\"generating\",\"mime_type\":\"image/jpeg\",\"result\":\"JPEGDATA\"}}\n"
+        );
+        fs::write(&path, content).expect("write test jsonl");
+
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "ig-mime")
+            .expect("parse ok");
+
+        let mime = detail
+            .turns
+            .iter()
+            .flat_map(|t| t.blocks.iter())
+            .find_map(|b| match b {
+                ContentBlock::ImageGeneration {
+                    image: Some(img), ..
+                } if img.data == "JPEGDATA" => Some(img.mime_type.clone()),
+                _ => None,
+            })
+            .expect("jpeg image should be present");
+        assert_eq!(mime, "image/jpeg");
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// Manual smoke check against a real codex JSONL captured locally.
+    /// `#[ignore]` so it doesn't run in CI; activate with
+    /// `cargo test image_generation_smoke_real_session -- --ignored --nocapture`
+    /// while iterating on the parser locally.
+    #[test]
+    #[ignore]
+    fn image_generation_smoke_real_session() {
+        let path = PathBuf::from(
+            "/Users/xggz/.codex/sessions/2026/05/10/rollout-2026-05-10T06-13-43-019e0ecd-b954-7e33-8011-053d08baa62e.jsonl"
+        );
+        if !path.exists() {
+            eprintln!("session not found at {}; skipping", path.display());
+            return;
+        }
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "smoke")
+            .expect("parse ok");
+
+        let mut imagegen_count = 0usize;
+        let mut prompt_chars = 0usize;
+        let mut total_bytes = 0usize;
+        for turn in &detail.turns {
+            for b in &turn.blocks {
+                if let ContentBlock::ImageGeneration {
+                    revised_prompt,
+                    image,
+                } = b
+                {
+                    imagegen_count += 1;
+                    if let Some(p) = revised_prompt {
+                        prompt_chars += p.chars().count();
+                    }
+                    if let Some(img) = image {
+                        total_bytes += img.data.len();
+                    }
+                }
+            }
+        }
+        eprintln!("image_generation_blocks={imagegen_count}");
+        eprintln!("revised_prompt_total_chars={prompt_chars}");
+        eprintln!("total_image_base64_bytes={total_bytes}");
+        assert!(
+            imagegen_count >= 1,
+            "expected at least 1 ContentBlock::ImageGeneration in the smoke session"
+        );
+    }
+
+    /// When `revised_prompt` is absent in the payload, the parser must emit
+    /// `revised_prompt: None` (codex's `imagegen` skill does not always echo
+    /// the prompt back, e.g. when status="failed").
+    #[test]
+    fn image_generation_end_omits_revised_prompt_when_missing() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time ok")
+            .as_nanos();
+        let path: PathBuf = env::temp_dir().join(format!("codeg-codex-img-noprompt-{nanos}.jsonl"));
+
+        let content = concat!(
+            "{\"timestamp\":\"2026-05-05T12:35:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"ig-noprompt\",\"cwd\":\"/tmp/demo\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:35:17Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_np\",\"status\":\"generating\",\"result\":\"NOPROMPT_DATA\"}}\n"
+        );
+        fs::write(&path, content).expect("write test jsonl");
+
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "ig-noprompt")
+            .expect("parse ok");
+
+        let block = detail
+            .turns
+            .iter()
+            .flat_map(|t| t.blocks.iter())
+            .find(|b| matches!(b, ContentBlock::ImageGeneration { .. }))
+            .expect("image generation block present");
+        match block {
+            ContentBlock::ImageGeneration {
+                revised_prompt,
+                image,
+            } => {
+                assert!(revised_prompt.is_none());
+                let image = image.as_ref().expect("image present on completed event");
+                assert_eq!(image.data, "NOPROMPT_DATA");
+            }
+            _ => unreachable!(),
+        }
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// Subagents in codex run inside the parent's JSONL — their
+    /// agent_message / agent_reasoning events are filtered while
+    /// `active_agent_count > 0`. image_generation events must follow the
+    /// same rule, otherwise a subagent's generated image leaks into the
+    /// parent timeline as an inline ContentBlock::ImageGeneration.
+    #[test]
+    fn image_generation_inside_subagent_is_suppressed_in_parent() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time ok")
+            .as_nanos();
+        let path: PathBuf =
+            env::temp_dir().join(format!("codeg-codex-img-subagent-{nanos}.jsonl"));
+
+        // Sequence:
+        //   1. user msg
+        //   2. parent calls spawn_agent           → active_agent_count = 1
+        //   3. spawn_agent output (assigns agent_id)
+        //   4. SUBAGENT generates an image (event_msg + response_item)
+        //   5. parent calls close_agent
+        //   6. close_agent output                  → active_agent_count = 0
+        //   7. PARENT generates an image after the subagent finished
+        //
+        // Only step 7's image must surface; step 4 is the subagent's and
+        // belongs to the subagent's own transcript, not the parent timeline.
+        let content = concat!(
+            "{\"timestamp\":\"2026-05-05T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"ig-subagent\",\"cwd\":\"/tmp/demo\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"call_id\":\"spawn_call_1\",\"name\":\"spawn_agent\",\"arguments\":\"{\\\"agent_type\\\":\\\"researcher\\\",\\\"message\\\":\\\"do work\\\"}\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"spawn_call_1\",\"output\":\"{\\\"agent_id\\\":\\\"agent_a\\\"}\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:04Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_subagent_x\",\"status\":\"generating\",\"revised_prompt\":\"subagent painted this\",\"result\":\"SUBAGENT_BYTES\",\"saved_path\":\"/tmp/sub.png\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:05Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"image_generation_call\",\"id\":\"ig_subagent_y\",\"status\":\"generating\",\"revised_prompt\":\"subagent painted this too\",\"result\":\"SUBAGENT_BYTES_2\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:06Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"call_id\":\"close_call_1\",\"name\":\"close_agent\",\"arguments\":\"{\\\"target\\\":\\\"agent_a\\\"}\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:07Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"close_call_1\",\"output\":\"{}\"}}\n",
+            "{\"timestamp\":\"2026-05-05T12:00:08Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_parent\",\"status\":\"generating\",\"revised_prompt\":\"parent painted this\",\"result\":\"PARENT_BYTES\",\"saved_path\":\"/tmp/parent.png\"}}\n"
+        );
+        fs::write(&path, content).expect("write test jsonl");
+
+        let parser = CodexParser::new();
+        let detail = parser
+            .parse_conversation_detail(&path, "ig-subagent")
+            .expect("parse ok");
+
+        let imagegen_blocks: Vec<&ContentBlock> = detail
+            .turns
+            .iter()
+            .flat_map(|t| t.blocks.iter())
+            .filter(|b| matches!(b, ContentBlock::ImageGeneration { .. }))
+            .collect();
+
+        assert_eq!(
+            imagegen_blocks.len(),
+            1,
+            "only the parent's post-subagent image must surface ({} blocks)",
+            imagegen_blocks.len()
+        );
+        match imagegen_blocks[0] {
+            ContentBlock::ImageGeneration {
+                revised_prompt,
+                image,
+            } => {
+                assert_eq!(revised_prompt.as_deref(), Some("parent painted this"));
+                let image = image.as_ref().expect("parent image present");
+                assert_eq!(image.data, "PARENT_BYTES");
+                assert_eq!(image.uri.as_deref(), Some("/tmp/parent.png"));
+            }
+            other => panic!("expected ContentBlock::ImageGeneration, got {other:?}"),
+        }
+
+        let _ = fs::remove_file(path);
     }
 }

@@ -623,6 +623,7 @@ impl ClaudeParser {
                         usage: None,
                         duration_ms: None,
                         model: None,
+                        completed_at: Some(timestamp),
                     });
                 }
                 "assistant" => {
@@ -654,6 +655,7 @@ impl ClaudeParser {
                         usage,
                         duration_ms: None,
                         model: msg_model,
+                        completed_at: Some(timestamp),
                     });
                 }
                 "system" => {
@@ -706,6 +708,7 @@ impl ClaudeParser {
                             usage: None,
                             duration_ms: None,
                             model: None,
+                            completed_at: Some(timestamp),
                         });
                     }
                 }
@@ -809,6 +812,7 @@ impl ClaudeParser {
                             agent_stats: None,
                         });
                     } else {
+                        let timestamp = parse_timestamp(&value).unwrap_or_else(Utc::now);
                         messages.push(UnifiedMessage {
                             id: format!("synth-result-{}", messages.len()),
                             role: MessageRole::Assistant,
@@ -818,10 +822,11 @@ impl ClaudeParser {
                                 is_error,
                                 agent_stats: None,
                             }],
-                            timestamp: parse_timestamp(&value).unwrap_or_else(Utc::now),
+                            timestamp,
                             usage: None,
                             duration_ms: None,
                             model: None,
+                            completed_at: Some(timestamp),
                         });
                     }
                 }
@@ -1293,12 +1298,21 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
             let usage = msg.usage.clone();
             let duration_ms = msg.duration_ms;
             let turn_model = msg.model.clone();
+            // Track the latest event time across the assistant message and
+            // any tool-result-only user messages absorbed below; that's the
+            // turn's true completion moment, not `timestamp + duration_ms`
+            // (turn_duration encodes the entire turn span and adding it to
+            // the assistant event time double-counts).
+            let mut completed_at = msg.completed_at;
             i += 1;
 
             // Only absorb immediately following tool-result-only user msgs
             // (stop at the next assistant message to keep turns small for virtualization)
             while i < messages.len() && is_tool_result_only(&messages[i]) {
                 blocks.extend(messages[i].content.clone());
+                if messages[i].completed_at.is_some() {
+                    completed_at = messages[i].completed_at;
+                }
                 i += 1;
             }
 
@@ -1310,6 +1324,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage,
                 duration_ms,
                 model: turn_model,
+                completed_at,
             });
         } else if matches!(msg.role, MessageRole::System) {
             turns.push(MessageTurn {
@@ -1320,6 +1335,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         } else {
@@ -1331,6 +1347,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 usage: None,
                 duration_ms: None,
                 model: None,
+                completed_at: msg.completed_at,
             });
             i += 1;
         }
@@ -1388,6 +1405,7 @@ mod tests {
                 }),
                 duration_ms: None,
                 model: None,
+                completed_at: None,
             },
             MessageTurn {
                 id: "turn-1".to_string(),
@@ -1402,6 +1420,7 @@ mod tests {
                 }),
                 duration_ms: None,
                 model: None,
+                completed_at: None,
             },
         ];
 
@@ -1471,6 +1490,88 @@ mod tests {
             .context_window_usage_percent
             .expect("context window usage percent");
         assert!((percent - 0.17).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_detail_completion_time_uses_event_log_timestamp_not_added_duration() {
+        // Regression: turn_duration encodes the *entire* turn span, so
+        // adding it to the assistant event timestamp lands far in the
+        // future. completed_at must reflect when the message actually
+        // finished, i.e. the assistant event timestamp itself (or the
+        // turn_duration system event's timestamp ≈ same instant).
+        let path = std::env::temp_dir().join(format!(
+            "codeg-claude-completed-{}.jsonl",
+            uuid::Uuid::new_v4()
+        ));
+        let mut file = fs::File::create(&path).expect("create temp jsonl");
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({
+                "type": "user",
+                "sessionId": "session-completed",
+                "timestamp": "2026-03-01T10:00:00Z",
+                "uuid": "u1",
+                "cwd": "/tmp/demo",
+                "gitBranch": "main",
+                "message": {"content": [{"type": "text", "text": "hi"}]}
+            })
+        )
+        .expect("write user line");
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "session-completed",
+                "timestamp": "2026-03-01T10:03:19.301Z",
+                "uuid": "a1",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "content": [{"type": "text", "text": "ok"}]
+                }
+            })
+        )
+        .expect("write assistant line");
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({
+                "type": "system",
+                "subtype": "turn_duration",
+                "sessionId": "session-completed",
+                "timestamp": "2026-03-01T10:03:19.353Z",
+                "uuid": "s1",
+                "durationMs": 199_033u64
+            })
+        )
+        .expect("write turn_duration line");
+
+        let parser = ClaudeParser {
+            base_dir: PathBuf::new(),
+        };
+        let detail = parser
+            .parse_conversation_detail(&path, "session-completed")
+            .expect("parse conversation detail");
+        fs::remove_file(&path).expect("cleanup temp jsonl");
+
+        let assistant = detail
+            .turns
+            .iter()
+            .find(|t| matches!(t.role, TurnRole::Assistant))
+            .expect("assistant turn");
+        let completed_at = assistant.completed_at.expect("completed_at populated");
+        // The assistant event's own timestamp.
+        let expected = "2026-03-01T10:03:19.301Z"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(completed_at, expected);
+        // Sanity: ensure we did NOT compute timestamp + duration_ms
+        // (which would have landed at 10:06:38.334Z, ~3min 19s later).
+        let wrong = "2026-03-01T10:06:38.334Z"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_ne!(completed_at, wrong);
     }
 
     #[test]

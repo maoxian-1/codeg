@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::acp::types::{
     AcpEvent, AvailableCommandInfo, ConnectionStatus, PromptCapabilitiesInfo,
-    SessionConfigOptionInfo, SessionModeStateInfo,
+    SessionConfigOptionInfo, SessionModeStateInfo, ToolCallImageInfo,
 };
 use crate::models::agent::AgentType;
 use crate::models::message::MessageRole;
@@ -56,6 +56,16 @@ pub struct ToolCallState {
     /// extraction. `None` if the agent didn't supply it. Same partial-update
     /// preservation semantic as `locations`.
     pub meta: Option<serde_json::Value>,
+    /// Latest images attached to this tool call (e.g. codex-acp v0.14+
+    /// image generation). Replace-on-update semantics matching `content`:
+    /// a fresh `ToolCallUpdate` carrying `Some(images)` replaces the prior
+    /// vec, `None` preserves it. Persisted on snapshot so a frontend
+    /// reconnecting mid-turn or after refresh sees the same image that was
+    /// streamed live. ⚠ base64 image data can be multi-MB per entry; the
+    /// snapshot endpoint payload grows accordingly. This is the cost of
+    /// surviving page refresh without re-fetching from JSONL.
+    #[serde(default)]
+    pub images: Vec<ToolCallImageInfo>,
     /// 流式拼接的 input chunks（serde 不输出，仅运行时用）
     #[serde(skip)]
     pub raw_input_chunks: Vec<String>,
@@ -278,6 +288,7 @@ impl SessionState {
                 raw_output,
                 locations,
                 meta,
+                images,
             } => {
                 self.upsert_tool_call(
                     tool_call_id,
@@ -289,6 +300,7 @@ impl SessionState {
                     raw_output.as_deref(),
                     locations.as_ref(),
                     meta.as_ref(),
+                    images.as_deref(),
                 );
                 // Anchor the tool call in `live_message.content` so snapshot
                 // reload preserves position relative to surrounding text /
@@ -307,6 +319,7 @@ impl SessionState {
                 raw_output,
                 locations,
                 meta,
+                images,
                 ..
             } => {
                 self.upsert_tool_call(
@@ -319,6 +332,7 @@ impl SessionState {
                     raw_output.as_deref(),
                     locations.as_ref(),
                     meta.as_ref(),
+                    images.as_deref(),
                 );
                 // Defensive: if a ToolCallUpdate arrives before its initial
                 // ToolCall (unusual ordering / replay), ensure the ref block
@@ -469,6 +483,7 @@ impl SessionState {
         raw_output: Option<&str>,
         locations: Option<&serde_json::Value>,
         meta: Option<&serde_json::Value>,
+        images: Option<&[ToolCallImageInfo]>,
     ) {
         let entry = self
             .active_tool_calls
@@ -483,6 +498,7 @@ impl SessionState {
                 content: None,
                 locations: None,
                 meta: None,
+                images: Vec::new(),
                 raw_input_chunks: Vec::new(),
             });
         if let Some(k) = kind {
@@ -517,6 +533,13 @@ impl SessionState {
         }
         if let Some(m) = meta {
             entry.meta = Some(m.clone());
+        }
+        if let Some(imgs) = images {
+            // Replace-on-update: the agent re-sends the full image list on
+            // every ToolCallUpdate that carries content (see
+            // extract_tool_call_images in connection.rs). Absent images
+            // (None at the AcpEvent layer) preserve the prior vec.
+            entry.images = imgs.to_vec();
         }
     }
 
@@ -695,6 +718,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         s.apply_event(&AcpEvent::ConversationLinked {
             conversation_id: 7,
@@ -872,6 +896,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").expect("tc-1 inserted");
         assert_eq!(entry.status, ToolCallStatus::Pending);
@@ -895,6 +920,7 @@ mod tests {
                 raw_output: None,
                 locations: None,
                 meta: None,
+                images: None,
             });
         }
         let snap = s.to_snapshot();
@@ -919,6 +945,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").expect("tc-1 inserted");
         assert_eq!(entry.content.as_deref(), Some("line one\nline two"));
@@ -933,6 +960,7 @@ mod tests {
             raw_output_append: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").unwrap();
         // Phase 2 chooses replace-on-update semantics: update == latest known content.
@@ -952,6 +980,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         // raw_output text "\"file contents\"" — i.e. JSON-encoded string.
         s.apply_event(&AcpEvent::ToolCallUpdate {
@@ -964,6 +993,7 @@ mod tests {
             raw_output_append: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").unwrap();
         assert_eq!(entry.status, ToolCallStatus::Completed);
@@ -989,6 +1019,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         s.apply_event(&AcpEvent::PermissionRequest {
             request_id: "p-1".into(),
@@ -1105,6 +1136,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         });
         s.apply_event(&AcpEvent::ToolCallUpdate {
             tool_call_id: "tc-1".into(),
@@ -1116,6 +1148,7 @@ mod tests {
             raw_output_append: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").unwrap();
         assert_eq!(entry.input, Some(serde_json::json!({"a": 1})));
@@ -1167,6 +1200,7 @@ mod tests {
                 raw_output: None,
                 locations: None,
                 meta: None,
+                images: None,
             },
             AcpEvent::ToolCallUpdate {
                 tool_call_id: "tc-1".into(),
@@ -1178,6 +1212,7 @@ mod tests {
                 raw_output_append: None,
                 locations: None,
                 meta: None,
+                images: None,
             },
             AcpEvent::Thinking {
                 text: "considering".into(),
@@ -1298,6 +1333,7 @@ mod tests {
             raw_output: None,
             locations: None,
             meta: None,
+            images: None,
         }
     }
 
@@ -1356,6 +1392,7 @@ mod tests {
             raw_output_append: None,
             locations: None,
             meta: None,
+            images: None,
         });
 
         let summary = live_block_summary(&s);
@@ -1384,6 +1421,7 @@ mod tests {
             raw_output: None,
             locations: Some(locs.clone()),
             meta: Some(meta.clone()),
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").expect("tc-1 inserted");
         assert_eq!(entry.locations.as_ref(), Some(&locs));
@@ -1415,6 +1453,7 @@ mod tests {
             raw_output: None,
             locations: Some(locs.clone()),
             meta: Some(meta.clone()),
+            images: None,
         });
         // Subsequent partial update without locations/meta — must not clobber.
         s.apply_event(&AcpEvent::ToolCallUpdate {
@@ -1427,6 +1466,7 @@ mod tests {
             raw_output_append: None,
             locations: None,
             meta: None,
+            images: None,
         });
         let entry = s.active_tool_calls.get("tc-1").unwrap();
         assert_eq!(entry.status, ToolCallStatus::Completed);
@@ -1439,6 +1479,108 @@ mod tests {
             entry.meta.as_ref(),
             Some(&meta),
             "ToolCallUpdate without meta must NOT clobber previously-set value"
+        );
+    }
+
+    #[test]
+    fn tool_call_images_replace_or_preserve_on_update() {
+        let mut s = fresh_state();
+        let img_v1 = ToolCallImageInfo {
+            data: "AAAA".into(),
+            mime_type: "image/png".into(),
+            uri: Some("/tmp/v1.png".into()),
+        };
+        let img_v2 = ToolCallImageInfo {
+            data: "BBBB".into(),
+            mime_type: "image/jpeg".into(),
+            uri: None,
+        };
+
+        // Initial ToolCall carries one image — should be persisted.
+        s.apply_event(&AcpEvent::ToolCall {
+            tool_call_id: "ig-1".into(),
+            title: "Image generation".into(),
+            kind: "other".into(),
+            status: "in_progress".into(),
+            content: None,
+            raw_input: None,
+            raw_output: None,
+            locations: None,
+            meta: None,
+            images: Some(vec![img_v1.clone()]),
+        });
+        let entry = s.active_tool_calls.get("ig-1").unwrap();
+        assert_eq!(entry.images.len(), 1);
+        assert_eq!(entry.images[0].data, "AAAA");
+
+        // Update without images field — must preserve prior images.
+        s.apply_event(&AcpEvent::ToolCallUpdate {
+            tool_call_id: "ig-1".into(),
+            title: None,
+            status: Some("in_progress".into()),
+            content: None,
+            raw_input: None,
+            raw_output: None,
+            raw_output_append: None,
+            locations: None,
+            meta: None,
+            images: None,
+        });
+        let entry = s.active_tool_calls.get("ig-1").unwrap();
+        assert_eq!(
+            entry.images.len(),
+            1,
+            "ToolCallUpdate with images=None must preserve prior images"
+        );
+        assert_eq!(entry.images[0].data, "AAAA");
+
+        // Update with Some(new_vec) — must replace.
+        s.apply_event(&AcpEvent::ToolCallUpdate {
+            tool_call_id: "ig-1".into(),
+            title: None,
+            status: Some("completed".into()),
+            content: None,
+            raw_input: None,
+            raw_output: None,
+            raw_output_append: None,
+            locations: None,
+            meta: None,
+            images: Some(vec![img_v2.clone()]),
+        });
+        let entry = s.active_tool_calls.get("ig-1").unwrap();
+        assert_eq!(entry.images.len(), 1, "Some(vec) replaces prior images");
+        assert_eq!(entry.images[0].data, "BBBB");
+        assert_eq!(entry.images[0].mime_type, "image/jpeg");
+        assert!(entry.images[0].uri.is_none());
+
+        // Snapshot round-trip preserves images.
+        let snap = s.to_snapshot();
+        let tc = snap
+            .active_tool_calls
+            .iter()
+            .find(|t| t.id == "ig-1")
+            .unwrap();
+        assert_eq!(tc.images.len(), 1);
+        assert_eq!(tc.images[0].data, "BBBB");
+
+        // Update with Some(empty) — must clear images (allows the agent to
+        // explicitly drop a prior image if needed).
+        s.apply_event(&AcpEvent::ToolCallUpdate {
+            tool_call_id: "ig-1".into(),
+            title: None,
+            status: None,
+            content: None,
+            raw_input: None,
+            raw_output: None,
+            raw_output_append: None,
+            locations: None,
+            meta: None,
+            images: Some(vec![]),
+        });
+        let entry = s.active_tool_calls.get("ig-1").unwrap();
+        assert!(
+            entry.images.is_empty(),
+            "Some(empty vec) clears prior images"
         );
     }
 
