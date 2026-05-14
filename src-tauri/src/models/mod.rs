@@ -6,6 +6,7 @@ pub mod message;
 pub mod model_provider;
 pub mod pet;
 pub mod quick_message;
+pub mod remote_workspace_connection;
 pub mod system;
 
 pub use agent::AgentType;
@@ -17,15 +18,16 @@ pub use conversation::{
     SidebarData,
 };
 pub use folder::{FolderCommandInfo, FolderDetail, FolderHistoryEntry, OpenedTab};
-pub use quick_message::QuickMessageInfo;
 pub use message::{
     AgentExecutionStats, AgentToolCall, ContentBlock, ImageData, MessageRole, MessageTurn,
     TurnRole, TurnUsage, UnifiedMessage,
 };
+pub use quick_message::QuickMessageInfo;
+pub use remote_workspace_connection::RemoteWorkspaceConnectionInfo;
+#[cfg(feature = "tauri-runtime")]
+pub use system::SystemRenderingSettings;
 pub use system::{
     AvailableTerminalShells, GitCredentials, GitDetectResult, GitHubAccountsSettings,
     GitHubTokenValidation, GitSettings, SystemLanguageSettings, SystemProxySettings,
     SystemTerminalSettings, TerminalShellOption,
 };
-#[cfg(feature = "tauri-runtime")]
-pub use system::SystemRenderingSettings;

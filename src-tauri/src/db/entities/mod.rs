@@ -10,3 +10,4 @@ pub mod model_provider;
 pub mod opened_tab;
 pub mod prelude;
 pub mod quick_message;
+pub mod remote_workspace_connection;

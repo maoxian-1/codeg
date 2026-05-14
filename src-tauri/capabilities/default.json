@@ -2,7 +2,22 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "commit-*", "merge-*", "stash-*", "push-*", "settings", "project-boot", "pet"],
+  "windows": [
+    "main",
+    "commit-*",
+    "merge-*",
+    "stash-*",
+    "push-*",
+    "settings",
+    "project-boot",
+    "pet",
+    "remote-workspace-*",
+    "remote-settings-*",
+    "remote-commit-*",
+    "remote-merge-*",
+    "remote-stash-*",
+    "remote-push-*"
+  ],
   "permissions": [
     "core:default",
     "core:window:default",

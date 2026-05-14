@@ -21,6 +21,10 @@ export const THEME_COLORS = [
 
 export type ThemeColor = (typeof THEME_COLORS)[number]
 
+export const FOLDER_THEME_COLOR_INHERIT = "inherit" as const
+
+export type FolderThemeColor = ThemeColor | typeof FOLDER_THEME_COLOR_INHERIT
+
 /**
  * 默认主题色。选用 "neutral" 是因为它对应当前 globals.css 的现存 :root 值
  * （所有 chroma=0 的纯灰阶），可保证升级后视觉零差异。

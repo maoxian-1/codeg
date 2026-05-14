@@ -8,5 +8,6 @@ pub mod folder_service;
 pub mod import_service;
 pub mod model_provider_service;
 pub mod quick_message_service;
+pub mod remote_workspace_connection_service;
 pub mod sender_context_service;
 pub mod tab_service;

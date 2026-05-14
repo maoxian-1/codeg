@@ -78,7 +78,7 @@ pub async fn load_saved_appearance_mode(conn: &DatabaseConnection) {
 }
 
 pub struct SettingsWindowState {
-    owner_window_label: Mutex<Option<String>>,
+    owner_by_settings_label: Mutex<HashMap<String, String>>,
 }
 
 pub struct CommitWindowState {
@@ -248,21 +248,21 @@ pub(crate) fn post_window_setup(window: &tauri::WebviewWindow) {
 impl SettingsWindowState {
     pub fn new() -> Self {
         Self {
-            owner_window_label: Mutex::new(None),
+            owner_by_settings_label: Mutex::new(HashMap::new()),
         }
     }
 
-    fn set_owner(&self, label: String) {
-        if let Ok(mut owner) = self.owner_window_label.lock() {
-            *owner = Some(label);
+    fn set_owner(&self, settings_label: String, owner_label: String) {
+        if let Ok(mut owners) = self.owner_by_settings_label.lock() {
+            owners.insert(settings_label, owner_label);
         }
     }
 
-    fn take_owner(&self) -> Option<String> {
-        self.owner_window_label
+    fn take_owner(&self, settings_label: &str) -> Option<String> {
+        self.owner_by_settings_label
             .lock()
             .ok()
-            .and_then(|mut owner| owner.take())
+            .and_then(|mut owners| owners.remove(settings_label))
     }
 }
 
@@ -333,6 +333,14 @@ fn resolve_settings_target(section: Option<&str>, agent_type: Option<&str>) -> S
         }
     }
     route.to_string()
+}
+
+fn append_remote_connection_id(route: String, remote_connection_id: Option<i32>) -> String {
+    match remote_connection_id {
+        Some(id) if route.contains('?') => format!("{route}&remoteConnectionId={id}"),
+        Some(id) => format!("{route}?remoteConnectionId={id}"),
+        None => route,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -498,9 +506,13 @@ pub async fn open_commit_window(
     state: tauri::State<'_, CommitWindowState>,
     folder_id: i32,
     locale: Option<crate::models::system::AppLocale>,
+    remote_connection_id: Option<i32>,
 ) -> Result<(), AppCommandError> {
     let owner_label = window.label().to_string();
-    let label = format!("commit-{folder_id}");
+    let label = match remote_connection_id {
+        Some(remote_id) => format!("remote-commit-{remote_id}-{folder_id}"),
+        None => format!("commit-{folder_id}"),
+    };
 
     if let Some(existing) = app.get_webview_window(&label) {
         state.set_owner(label.clone(), owner_label);
@@ -511,18 +523,25 @@ pub async fn open_commit_window(
         return Ok(());
     }
 
-    let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
-        .await
-        .map_err(AppCommandError::from)?
-        .ok_or_else(|| {
-            AppCommandError::not_found(format!("Folder {folder_id} not found"))
-                .with_detail(format!("folder_id={folder_id}"))
-        })?;
-
     let titles = resolve_window_titles(&db.conn, locale).await;
-    let url = WebviewUrl::App(format!("commit?folderId={folder_id}").into());
+    let window_title = if remote_connection_id.is_some() {
+        titles.commit.to_string()
+    } else {
+        let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
+            .await
+            .map_err(AppCommandError::from)?
+            .ok_or_else(|| {
+                AppCommandError::not_found(format!("Folder {folder_id} not found"))
+                    .with_detail(format!("folder_id={folder_id}"))
+            })?;
+        format!("{} - {}", titles.commit, folder.name)
+    };
+    let url = WebviewUrl::App(
+        append_remote_connection_id(format!("commit?folderId={folder_id}"), remote_connection_id)
+            .into(),
+    );
     let builder = WebviewWindowBuilder::new(&app, &label, url)
-        .title(format!("{} - {}", titles.commit, folder.name))
+        .title(window_title)
         .inner_size(1220.0, 820.0)
         .min_inner_size(980.0, 620.0)
         .center();
@@ -543,6 +562,7 @@ pub async fn open_commit_window(
 
 #[cfg(feature = "tauri-runtime")]
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
+#[allow(clippy::too_many_arguments)]
 pub async fn open_settings_window(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -550,13 +570,21 @@ pub async fn open_settings_window(
     section: Option<String>,
     agent_type: Option<String>,
     locale: Option<crate::models::system::AppLocale>,
+    remote_connection_id: Option<i32>,
     state: tauri::State<'_, SettingsWindowState>,
 ) -> Result<(), AppCommandError> {
-    let target_route = resolve_settings_target(section.as_deref(), agent_type.as_deref());
+    let target_route = append_remote_connection_id(
+        resolve_settings_target(section.as_deref(), agent_type.as_deref()),
+        remote_connection_id,
+    );
+    let settings_label = match remote_connection_id {
+        Some(remote_id) => format!("remote-settings-{remote_id}"),
+        None => "settings".to_string(),
+    };
     let owner_label = window.label().to_string();
-    if let Some(existing) = app.get_webview_window("settings") {
+    if let Some(existing) = app.get_webview_window(&settings_label) {
         post_window_setup(&existing);
-        if section.is_some() || agent_type.is_some() {
+        if section.is_some() || agent_type.is_some() || remote_connection_id.is_some() {
             let target_path = format!("/{target_route}");
             let target_json = serde_json::to_string(&target_path).map_err(|e| {
                 AppCommandError::window("Failed to build settings navigation target", e.to_string())
@@ -566,8 +594,8 @@ pub async fn open_settings_window(
                 AppCommandError::window("Failed to navigate settings window", e.to_string())
             })?;
         }
-        let _ = state.take_owner();
-        state.set_owner(owner_label);
+        let _ = state.take_owner(&settings_label);
+        state.set_owner(settings_label, owner_label);
         let _ = existing.unminimize();
         existing.set_focus().map_err(|e| {
             AppCommandError::window("Failed to focus settings window", e.to_string())
@@ -577,7 +605,7 @@ pub async fn open_settings_window(
 
     let titles = resolve_window_titles(&db.conn, locale).await;
     let url = WebviewUrl::App(target_route.into());
-    let builder = WebviewWindowBuilder::new(&app, "settings", url)
+    let builder = WebviewWindowBuilder::new(&app, &settings_label, url)
         .title(titles.settings)
         .inner_size(1080.0, 700.0)
         .min_inner_size(1080.0, 600.0)
@@ -589,15 +617,19 @@ pub async fn open_settings_window(
         .build()
         .map_err(|e| AppCommandError::window("Failed to open settings window", e.to_string()))?;
     post_window_setup(&settings_window);
-    state.set_owner(owner_label);
+    state.set_owner(settings_label, owner_label);
     settings_window
         .set_focus()
         .map_err(|e| AppCommandError::window("Failed to focus settings window", e.to_string()))?;
     Ok(())
 }
 
-pub fn restore_windows_after_settings(app: &AppHandle, state: &SettingsWindowState) {
-    if let Some(owner_label) = state.take_owner() {
+pub fn restore_windows_after_settings(
+    app: &AppHandle,
+    state: &SettingsWindowState,
+    settings_window_label: &str,
+) {
+    if let Some(owner_label) = state.take_owner(settings_window_label) {
         if let Some(window) = app.get_webview_window(&owner_label) {
             let _ = window.set_focus();
         }
@@ -649,6 +681,7 @@ impl Default for MergeWindowState {
 
 #[cfg(feature = "tauri-runtime")]
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
+#[allow(clippy::too_many_arguments)]
 pub async fn open_merge_window(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -658,9 +691,13 @@ pub async fn open_merge_window(
     operation: String,
     upstream_commit: Option<String>,
     locale: Option<crate::models::system::AppLocale>,
+    remote_connection_id: Option<i32>,
 ) -> Result<(), AppCommandError> {
     let owner_label = window.label().to_string();
-    let label = format!("merge-{folder_id}");
+    let label = match remote_connection_id {
+        Some(remote_id) => format!("remote-merge-{remote_id}-{folder_id}"),
+        None => format!("merge-{folder_id}"),
+    };
 
     if let Some(existing) = app.get_webview_window(&label) {
         state.set_owner(label.clone(), owner_label);
@@ -671,22 +708,27 @@ pub async fn open_merge_window(
         return Ok(());
     }
 
-    let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
-        .await
-        .map_err(AppCommandError::from)?
-        .ok_or_else(|| {
-            AppCommandError::not_found(format!("Folder {folder_id} not found"))
-                .with_detail(format!("folder_id={folder_id}"))
-        })?;
-
     let titles = resolve_window_titles(&db.conn, locale).await;
+    let window_title = if remote_connection_id.is_some() {
+        titles.merge.to_string()
+    } else {
+        let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
+            .await
+            .map_err(AppCommandError::from)?
+            .ok_or_else(|| {
+                AppCommandError::not_found(format!("Folder {folder_id} not found"))
+                    .with_detail(format!("folder_id={folder_id}"))
+            })?;
+        format!("{} - {}", titles.merge, folder.name)
+    };
     let mut url_str = format!("merge?folderId={folder_id}&operation={operation}");
     if let Some(ref commit) = upstream_commit {
         url_str.push_str(&format!("&upstreamCommit={commit}"));
     }
+    url_str = append_remote_connection_id(url_str, remote_connection_id);
     let url = WebviewUrl::App(url_str.into());
     let builder = WebviewWindowBuilder::new(&app, &label, url)
-        .title(format!("{} - {}", titles.merge, folder.name))
+        .title(window_title)
         .inner_size(1400.0, 900.0)
         .min_inner_size(1100.0, 650.0)
         .center();
@@ -771,8 +813,12 @@ pub async fn open_stash_window(
     db: tauri::State<'_, AppDatabase>,
     folder_id: i32,
     locale: Option<crate::models::system::AppLocale>,
+    remote_connection_id: Option<i32>,
 ) -> Result<(), AppCommandError> {
-    let label = format!("stash-{folder_id}");
+    let label = match remote_connection_id {
+        Some(remote_id) => format!("remote-stash-{remote_id}-{folder_id}"),
+        None => format!("stash-{folder_id}"),
+    };
 
     if let Some(existing) = app.get_webview_window(&label) {
         post_window_setup(&existing);
@@ -783,18 +829,25 @@ pub async fn open_stash_window(
         return Ok(());
     }
 
-    let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
-        .await
-        .map_err(AppCommandError::from)?
-        .ok_or_else(|| {
-            AppCommandError::not_found(format!("Folder {folder_id} not found"))
-                .with_detail(format!("folder_id={folder_id}"))
-        })?;
-
     let titles = resolve_window_titles(&db.conn, locale).await;
-    let url = WebviewUrl::App(format!("stash?folderId={folder_id}").into());
+    let window_title = if remote_connection_id.is_some() {
+        titles.stash.to_string()
+    } else {
+        let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
+            .await
+            .map_err(AppCommandError::from)?
+            .ok_or_else(|| {
+                AppCommandError::not_found(format!("Folder {folder_id} not found"))
+                    .with_detail(format!("folder_id={folder_id}"))
+            })?;
+        format!("{} - {}", titles.stash, folder.name)
+    };
+    let url = WebviewUrl::App(
+        append_remote_connection_id(format!("stash?folderId={folder_id}"), remote_connection_id)
+            .into(),
+    );
     let builder = WebviewWindowBuilder::new(&app, &label, url)
-        .title(format!("{} - {}", titles.stash, folder.name))
+        .title(window_title)
         .inner_size(1100.0, 700.0)
         .min_inner_size(800.0, 500.0)
         .center();
@@ -814,8 +867,12 @@ pub async fn open_push_window(
     db: tauri::State<'_, AppDatabase>,
     folder_id: i32,
     locale: Option<crate::models::system::AppLocale>,
+    remote_connection_id: Option<i32>,
 ) -> Result<(), AppCommandError> {
-    let label = format!("push-{folder_id}");
+    let label = match remote_connection_id {
+        Some(remote_id) => format!("remote-push-{remote_id}-{folder_id}"),
+        None => format!("push-{folder_id}"),
+    };
 
     if let Some(existing) = app.get_webview_window(&label) {
         post_window_setup(&existing);
@@ -826,18 +883,25 @@ pub async fn open_push_window(
         return Ok(());
     }
 
-    let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
-        .await
-        .map_err(AppCommandError::from)?
-        .ok_or_else(|| {
-            AppCommandError::not_found(format!("Folder {folder_id} not found"))
-                .with_detail(format!("folder_id={folder_id}"))
-        })?;
-
     let titles = resolve_window_titles(&db.conn, locale).await;
-    let url = WebviewUrl::App(format!("push?folderId={folder_id}").into());
+    let window_title = if remote_connection_id.is_some() {
+        titles.push.to_string()
+    } else {
+        let folder = crate::db::service::folder_service::get_folder_by_id(&db.conn, folder_id)
+            .await
+            .map_err(AppCommandError::from)?
+            .ok_or_else(|| {
+                AppCommandError::not_found(format!("Folder {folder_id} not found"))
+                    .with_detail(format!("folder_id={folder_id}"))
+            })?;
+        format!("{} - {}", titles.push, folder.name)
+    };
+    let url = WebviewUrl::App(
+        append_remote_connection_id(format!("push?folderId={folder_id}"), remote_connection_id)
+            .into(),
+    );
     let builder = WebviewWindowBuilder::new(&app, &label, url)
-        .title(format!("{} - {}", titles.push, folder.name))
+        .title(window_title)
         .inner_size(1100.0, 700.0)
         .min_inner_size(800.0, 500.0)
         .center();

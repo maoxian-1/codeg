@@ -40,15 +40,15 @@ export const PET_STATE_ROW: Record<PetState, number> = {
 // entries also implies the frame count for that row — extra columns in the
 // sheet are blank.
 export const PET_FRAME_DURATIONS_MS: Record<PetState, number[]> = {
-  idle: [280, 110, 110, 140, 140, 320],
+  idle: [1680, 660, 660, 840, 840, 1920],
   running_right: [120, 120, 120, 120, 120, 120, 120, 220],
   running_left: [120, 120, 120, 120, 120, 120, 120, 220],
-  waving: [240, 240, 240, 240],
-  jumping: [240, 110, 180, 340, 160],
-  failed: [140, 140, 140, 140, 140, 140, 140, 280],
-  waiting: [240, 240, 240, 240, 240, 240],
-  running: [120, 120, 120, 120, 120, 120],
-  review: [200, 200, 200, 200, 200, 200],
+  waving: [140, 140, 140, 280],
+  jumping: [140, 140, 140, 140, 280],
+  failed: [140, 140, 140, 140, 140, 140, 140, 240],
+  waiting: [150, 150, 150, 150, 150, 260],
+  running: [120, 120, 120, 120, 120, 220],
+  review: [150, 150, 150, 150, 150, 280],
 }
 
 // CSS background-position for a (row, col) cell. Uses the

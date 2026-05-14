@@ -1,57 +1,55 @@
-import type { Transport, UnsubscribeFn } from "./types"
+import type { RemoteTransportConfig, Transport, UnsubscribeFn } from "./types"
 import { buildCodegWebSocketProtocols } from "./ws-auth"
 
-const WEB_CALL_TIMEOUT_MS = 30_000
+const REMOTE_CALL_TIMEOUT_MS = 30_000
 
 interface WebEvent {
   channel: string
   payload: unknown
 }
 
-function getToken(): string {
-  return localStorage.getItem("codeg_token") ?? ""
-}
-
-export class WebTransport implements Transport {
+export class RemoteDesktopTransport implements Transport {
   private ws: WebSocket | null = null
   private handlers = new Map<string, Set<(payload: unknown) => void>>()
-  private baseUrl: string
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private wsFailCount = 0
+  private config: RemoteTransportConfig
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl
+  constructor(config: RemoteTransportConfig) {
+    this.config = {
+      ...config,
+      baseUrl: config.baseUrl.replace(/\/+$/, ""),
+    }
   }
 
   async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-    const token = getToken()
     const controller = new AbortController()
     const timeout = window.setTimeout(
       () => controller.abort(),
-      WEB_CALL_TIMEOUT_MS
+      REMOTE_CALL_TIMEOUT_MS
     )
     let res: Response
     try {
-      res = await fetch(`${this.baseUrl}/api/${command}`, {
+      res = await fetch(`${this.config.baseUrl}/api/${command}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${this.config.token}`,
         },
         body: JSON.stringify(args ?? {}),
         signal: controller.signal,
       })
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error("Request timed out")
+        throw new Error("Remote Workspace request timed out")
       }
       throw err
     } finally {
       window.clearTimeout(timeout)
     }
     if (res.status === 401) {
-      WebTransport.redirectToLogin()
-      throw new Error("Unauthorized")
+      this.config.onUnauthorized?.()
+      throw new Error("Remote Workspace connection expired")
     }
     if (!res.ok) {
       const error = await res.json().catch(() => ({
@@ -73,8 +71,7 @@ export class WebTransport implements Transport {
     const wrappedHandler = handler as (payload: unknown) => void
     this.handlers.get(event)!.add(wrappedHandler)
 
-    // If WS is not connected but we now have a token, connect
-    if (!this.ws && getToken()) {
+    if (!this.ws) {
       this.connectWs()
     }
 
@@ -84,21 +81,15 @@ export class WebTransport implements Transport {
   }
 
   isDesktop(): boolean {
-    return false
-  }
-
-  private static redirectToLogin() {
-    if (window.location.pathname.startsWith("/login")) return
-    localStorage.removeItem("codeg_token")
-    window.location.href = "/login"
+    return true
   }
 
   private connectWs() {
-    const token = getToken()
-    if (!token) return
-
-    const wsUrl = this.baseUrl.replace(/^http/, "ws") + "/ws/events"
-    this.ws = new WebSocket(wsUrl, buildCodegWebSocketProtocols(token))
+    const wsUrl = this.config.baseUrl.replace(/^http/, "ws") + "/ws/events"
+    this.ws = new WebSocket(
+      wsUrl,
+      buildCodegWebSocketProtocols(this.config.token)
+    )
 
     this.ws.onopen = () => {
       this.wsFailCount = 0
@@ -109,12 +100,10 @@ export class WebTransport implements Transport {
         const event = JSON.parse(msg.data) as WebEvent
         const handlers = this.handlers.get(event.channel)
         if (handlers) {
-          for (const h of handlers) {
-            h(event.payload)
-          }
+          for (const h of handlers) h(event.payload)
         }
       } catch {
-        // ignore malformed messages
+        return
       }
     }
 
@@ -122,7 +111,7 @@ export class WebTransport implements Transport {
       this.ws = null
       this.wsFailCount++
       if (this.wsFailCount >= 3) {
-        WebTransport.redirectToLogin()
+        this.config.onUnauthorized?.()
         return
       }
       this.reconnectTimer = setTimeout(() => this.connectWs(), 3000)
@@ -136,6 +125,7 @@ export class WebTransport implements Transport {
   destroy() {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
     }
     this.ws?.close()
     this.ws = null

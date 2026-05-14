@@ -204,8 +204,8 @@ fn read_host_from_stdin() -> String {
 }
 
 /// Look up a (username, token) pair for the given host using the codeg
-/// database at `app_data_dir/codeg.db` plus whichever token store is
-/// active for this build (OS keyring on desktop, `tokens.json` on server).
+/// database in `app_data_dir` plus whichever token store is active for this
+/// build (OS keyring on desktop, `tokens.json` on server).
 ///
 /// Returns:
 ///   - `Ok(Some((u, p)))` when a matching account + token are found.
@@ -223,7 +223,7 @@ pub(crate) async fn lookup_credential(
     app_data_dir: &Path,
     host: &str,
 ) -> Result<Option<(String, String)>, String> {
-    let db_path = app_data_dir.join("codeg.db");
+    let db_path = app_data_dir.join(crate::db::database_file_name());
     if !db_path.exists() {
         return Ok(None);
     }

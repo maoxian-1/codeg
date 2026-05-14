@@ -21,6 +21,14 @@ pub struct AppDatabase {
     pub conn: DatabaseConnection,
 }
 
+pub(crate) fn database_file_name() -> &'static str {
+    if cfg!(all(debug_assertions, feature = "tauri-runtime")) {
+        "codeg-dev.db"
+    } else {
+        "codeg.db"
+    }
+}
+
 pub async fn init_database(
     app_data_dir: impl AsRef<Path>,
     app_version: &str,
@@ -28,7 +36,7 @@ pub async fn init_database(
     let app_data_dir = app_data_dir.as_ref();
     std::fs::create_dir_all(app_data_dir)?;
 
-    let db_path = app_data_dir.join("codeg.db");
+    let db_path = app_data_dir.join(database_file_name());
     let db_url = format!(
         "sqlite:{}?mode=rwc",
         urlencoding::encode(&db_path.to_string_lossy())

@@ -10,10 +10,9 @@ use crate::db::error::DbError;
 use crate::models::agent::AgentType;
 use crate::models::{FolderDetail, FolderHistoryEntry};
 
-/// Sentinel stored in the DB that the frontend resolves to
-/// `var(--sidebar-foreground)` — the theme-aware text color. New folders
-/// start with this neutral swatch until the user picks a palette color.
-pub const DEFAULT_FOLDER_COLOR: &str = "foreground";
+/// Theme color sentinel stored in the DB. The frontend leaves the folder group
+/// unscoped so it inherits the app-wide appearance theme color.
+pub const DEFAULT_FOLDER_COLOR: &str = "inherit";
 
 fn to_entry(m: folder::Model) -> FolderHistoryEntry {
     FolderHistoryEntry {

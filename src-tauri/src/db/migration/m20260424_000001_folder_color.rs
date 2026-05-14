@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(Folder::Color)
                             .string()
                             .not_null()
-                            .default("foreground"),
+                            .default("inherit"),
                     )
                     .to_owned(),
             )

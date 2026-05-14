@@ -14,7 +14,8 @@ pub async fn ws_handler(
     Extension(state): Extension<Arc<AppState>>,
     Extension(shutdown_signal): Extension<Arc<ShutdownSignal>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_ws_connection(socket, state, shutdown_signal))
+    ws.protocols([super::auth::WS_EVENT_PROTOCOL])
+        .on_upgrade(|socket| handle_ws_connection(socket, state, shutdown_signal))
 }
 
 async fn handle_ws_connection(

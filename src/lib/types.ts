@@ -35,6 +35,22 @@ export interface AppCommandError {
   i18n_params?: Record<string, string> | null
 }
 
+export interface RemoteWorkspaceConnection {
+  id: number
+  name: string
+  base_url: string
+  token: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface RemoteWorkspaceConnectionInput {
+  name: string
+  baseUrl: string
+  token: string
+}
+
 export interface ConversationSummary {
   id: string
   agent_type: AgentType

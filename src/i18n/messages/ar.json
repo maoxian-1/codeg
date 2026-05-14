@@ -830,6 +830,7 @@
       "expandAllGroups": "توسيع كل المجموعات",
       "collapseAllGroups": "طي كل المجموعات",
       "newConversation": "محادثة جديدة",
+      "newConversationShort": "جديدة",
       "noConversationsFound": "لم يتم العثور على محادثات.",
       "importLocalSessions": "استيراد الجلسات المحلية",
       "importing": "جارٍ الاستيراد...",
@@ -871,6 +872,7 @@
       "folderHeaderMenu": {
         "manageConversations": "إدارة المحادثات…",
         "changeColor": "تغيير اللون",
+        "useThemeColor": "استخدام سمة التطبيق",
         "removeFromWorkspace": "إزالة من مساحة العمل"
       },
       "manageConversations": {
@@ -2372,5 +2374,37 @@
         "alreadyInstalled": "هذا الحيوان موجود بالفعل"
       }
     }
+  },
+  "RemoteWorkspace": {
+    "openRemoteWorkspace": "Open remote workspace",
+    "manage": "Manage remote workspace",
+    "manageTitle": "Remote Workspace connections",
+    "empty": "No remote connections",
+    "searchPlaceholder": "Search remote workspaces",
+    "orderFailed": "Failed to save remote workspace order",
+    "dragSort": "Drag to sort",
+    "dragSortConnection": "Drag to sort {name}",
+    "newConnection": "New connection",
+    "loading": "Loading",
+    "loadingConnection": "Loading remote connection",
+    "name": "Name",
+    "baseUrl": "Service URL",
+    "token": "Access token",
+    "save": "Save",
+    "delete": "Delete",
+    "confirmDelete": {
+      "title": "Delete remote connection?",
+      "message": "This will remove \"{name}\" from this device. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "saved": "Remote connection saved.",
+    "deleted": "Remote connection deleted.",
+    "loadFailed": "Failed to load remote connections",
+    "saveFailed": "Failed to save remote connection",
+    "deleteFailed": "Failed to delete remote connection",
+    "openFailed": "Failed to open remote workspace",
+    "connectionLoadFailed": "Failed to load remote connection: {message}",
+    "connectionExpired": "Remote connection \"{name}\" is expired. Update its token and reload this window."
   }
 }

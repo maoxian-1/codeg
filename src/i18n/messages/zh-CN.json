@@ -830,6 +830,7 @@
       "expandAllGroups": "展开全部分组",
       "collapseAllGroups": "折叠全部分组",
       "newConversation": "新建会话",
+      "newConversationShort": "新建",
       "noConversationsFound": "未找到会话。",
       "importLocalSessions": "导入本地会话",
       "importing": "导入中...",
@@ -871,6 +872,7 @@
       "folderHeaderMenu": {
         "manageConversations": "会话管理…",
         "changeColor": "修改颜色",
+        "useThemeColor": "使用设置主题",
         "removeFromWorkspace": "从工作区移除"
       },
       "manageConversations": {
@@ -2372,5 +2374,37 @@
         "alreadyInstalled": "该宠物已存在"
       }
     }
+  },
+  "RemoteWorkspace": {
+    "openRemoteWorkspace": "打开远端工作区",
+    "manage": "管理远端工作区",
+    "manageTitle": "远端工作区连接",
+    "empty": "暂无远端连接",
+    "searchPlaceholder": "搜索远端工作区",
+    "orderFailed": "保存远端工作区排序失败",
+    "dragSort": "拖拽排序",
+    "dragSortConnection": "拖拽排序 {name}",
+    "newConnection": "新建连接",
+    "loading": "加载中",
+    "loadingConnection": "正在加载远端连接",
+    "name": "名称",
+    "baseUrl": "服务地址",
+    "token": "访问 Token",
+    "save": "保存",
+    "delete": "删除",
+    "confirmDelete": {
+      "title": "删除远端连接？",
+      "message": "这会从当前设备移除“{name}”，此操作不可撤销。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "saved": "远端连接已保存。",
+    "deleted": "远端连接已删除。",
+    "loadFailed": "加载远端连接失败",
+    "saveFailed": "保存远端连接失败",
+    "deleteFailed": "删除远端连接失败",
+    "openFailed": "打开远端工作区失败",
+    "connectionLoadFailed": "加载远端连接失败：{message}",
+    "connectionExpired": "远端连接“{name}”已失效。请更新 Token 后重新加载此窗口。"
   }
 }

@@ -1,5 +1,13 @@
 export type UnsubscribeFn = () => void
 
+export interface RemoteTransportConfig {
+  id: number
+  name: string
+  baseUrl: string
+  token: string
+  onUnauthorized?: () => void
+}
+
 export interface Transport {
   /**
    * Invoke a backend command (replaces Tauri's invoke()).
@@ -19,4 +27,6 @@ export interface Transport {
    * Whether the app is running in a desktop Tauri environment.
    */
   isDesktop(): boolean
+
+  destroy?(): void
 }

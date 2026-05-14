@@ -13,7 +13,13 @@
     "push-*",
     "settings",
     "project-boot",
-    "pet"
+    "pet",
+    "remote-workspace-*",
+    "remote-settings-*",
+    "remote-commit-*",
+    "remote-merge-*",
+    "remote-stash-*",
+    "remote-push-*"
   ],
   "permissions": [
     "window-state:default"

@@ -15,6 +15,7 @@ import { getFolder } from "@/lib/api"
 import { toErrorMessage } from "@/lib/app-error"
 import type { FolderDetail } from "@/lib/types"
 import { GitCredentialProvider } from "@/contexts/git-credential-context"
+import { RemoteConnectionGate } from "@/contexts/remote-connection-context"
 
 const TOAST_DURATION_MS = 6000
 
@@ -134,7 +135,9 @@ function CommitPageInner() {
 export default function CommitPage() {
   return (
     <Suspense>
-      <CommitPageInner />
+      <RemoteConnectionGate>
+        <CommitPageInner />
+      </RemoteConnectionGate>
     </Suspense>
   )
 }

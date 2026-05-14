@@ -1,5 +1,7 @@
 mod acp;
-pub use acp::{idle_sweep_task, idle_timeout_from_env, lifecycle_subscriber_task, SWEEP_INTERVAL_SECS};
+pub use acp::{
+    idle_sweep_task, idle_timeout_from_env, lifecycle_subscriber_task, SWEEP_INTERVAL_SECS,
+};
 pub use network::proxy::init_proxy_from_db;
 mod app_error;
 pub mod app_state;
@@ -39,9 +41,9 @@ mod tauri_app {
     use crate::commands::{
         acp as acp_commands, chat_channel as chat_channel_commands, conversations,
         experts as experts_commands, file_io, folder_commands, folders, mcp as mcp_commands,
-        model_provider as model_provider_commands, notification, pet as pet_commands,
-        project_boot, quick_messages as quick_messages_commands, system_settings,
-        terminal as terminal_commands, version_control, windows,
+        model_provider as model_provider_commands, notification, pet as pet_commands, project_boot,
+        quick_messages as quick_messages_commands, remote_workspace as remote_workspace_commands,
+        system_settings, terminal as terminal_commands, version_control, windows,
         workspace_state as workspace_state_commands,
     };
     use crate::terminal::manager::TerminalManager;
@@ -101,10 +103,7 @@ mod tauri_app {
         }
 
         let mut tokens: Vec<String> = match std::env::var(ENV_KEY) {
-            Ok(prev) => prev
-                .split_whitespace()
-                .map(str::to_string)
-                .collect(),
+            Ok(prev) => prev.split_whitespace().map(str::to_string).collect(),
             Err(_) => Vec::new(),
         };
         for arg in DISABLE_GPU_ARGS {
@@ -140,9 +139,8 @@ mod tauri_app {
         //
         // Skipped in debug builds so a locally-built `cargo run` instance
         // can run alongside an installed release build of codeg during
-        // development. NOTE: both builds still share the same `app.codeg`
-        // data directory — don't drive workflows in dev that would corrupt
-        // release-side state (e.g. concurrent SQLite writes).
+        // development. Debug desktop builds use an isolated SQLite file, but
+        // they still share other `app.codeg` data-dir artifacts with release.
         #[cfg(not(debug_assertions))]
         let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_main_window(app);
@@ -256,11 +254,13 @@ mod tauri_app {
                         .state::<crate::pet_state_mapper::PetStateHandle>()
                         .inner()
                         .clone();
-                    tauri::async_runtime::spawn(crate::pet_state_mapper::pet_state_subscriber_task(
-                        broadcaster,
-                        emitter,
-                        pet_state_handle,
-                    ));
+                    tauri::async_runtime::spawn(
+                        crate::pet_state_mapper::pet_state_subscriber_task(
+                            broadcaster,
+                            emitter,
+                            pet_state_handle,
+                        ),
+                    );
                 }
 
                 // Spawn the LifecycleSubscriber: persists cross-connection DB state
@@ -377,7 +377,7 @@ mod tauri_app {
             .on_window_event(|window, event| {
                 let label = window.label().to_string();
 
-                if label == "settings"
+                if (label == "settings" || label.starts_with("remote-settings-"))
                     && matches!(
                         event,
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
@@ -385,11 +385,11 @@ mod tauri_app {
                 {
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<windows::SettingsWindowState>() {
-                        windows::restore_windows_after_settings(app, &state);
+                        windows::restore_windows_after_settings(app, &state, &label);
                     }
                 }
 
-                if label.starts_with("commit-")
+                if (label.starts_with("commit-") || label.starts_with("remote-commit-"))
                     && matches!(
                         event,
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
@@ -401,7 +401,7 @@ mod tauri_app {
                     }
                 }
 
-                if label.starts_with("merge-")
+                if (label.starts_with("merge-") || label.starts_with("remote-merge-"))
                     && matches!(
                         event,
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
@@ -411,18 +411,19 @@ mod tauri_app {
                     if let Some(state) = app.try_state::<windows::MergeWindowState>() {
                         windows::restore_window_after_merge(app, &state, &label);
                     }
-                    let app_clone = window.app_handle().clone();
-                    let label_clone = label.clone();
-                    tauri::async_runtime::spawn(async move {
-                        windows::cleanup_dangling_merge(&app_clone, &label_clone).await;
-                    });
+                    if label.starts_with("merge-") {
+                        let app_clone = window.app_handle().clone();
+                        let label_clone = label.clone();
+                        tauri::async_runtime::spawn(async move {
+                            windows::cleanup_dangling_merge(&app_clone, &label_clone).await;
+                        });
+                    }
                 }
 
                 if label == "pet"
                     && matches!(
                         event,
-                        tauri::WindowEvent::CloseRequested { .. }
-                            | tauri::WindowEvent::Destroyed
+                        tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
                     )
                 {
                     // Persist `enabled = false` so the next launch doesn't
@@ -599,6 +600,14 @@ mod tauri_app {
                 windows::open_stash_window,
                 windows::open_push_window,
                 windows::open_project_boot_window,
+                remote_workspace_commands::list_remote_workspace_connections,
+                remote_workspace_commands::create_remote_workspace_connection,
+                remote_workspace_commands::update_remote_workspace_connection,
+                remote_workspace_commands::delete_remote_workspace_connection,
+                remote_workspace_commands::test_remote_workspace_connection,
+                remote_workspace_commands::get_remote_workspace_connection,
+                remote_workspace_commands::reorder_remote_workspace_connections,
+                remote_workspace_commands::open_remote_workspace,
                 windows::open_pet_window,
                 windows::close_pet_window,
                 windows::pet_window_record_position,

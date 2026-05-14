@@ -11,12 +11,13 @@ import {
   type Ref,
 } from "react"
 import { useTranslations } from "next-intl"
+import { useTheme } from "next-themes"
 import { toast } from "sonner"
 import { Reorder, useDragControls, type DragControls } from "motion/react"
 import type { OverlayScrollbarsComponentRef } from "overlayscrollbars-react"
 import {
-  ChevronDown,
-  ChevronRight,
+  Folder,
+  Check,
   Download,
   ExternalLink,
   FolderOpen,
@@ -33,7 +34,7 @@ import { useAppWorkspace } from "@/contexts/app-workspace-context"
 import { useTabContext } from "@/contexts/tab-context"
 import { useTaskContext } from "@/contexts/task-context"
 import { useTerminalContext } from "@/contexts/terminal-context"
-import { useZoomLevel } from "@/hooks/use-appearance"
+import { useThemeColor, useZoomLevel } from "@/hooks/use-appearance"
 import {
   importLocalConversations,
   openProjectBootWindow,
@@ -49,6 +50,13 @@ import {
   saveFolderExpanded,
   type SidebarSortMode,
 } from "@/lib/sidebar-view-mode-storage"
+import {
+  FOLDER_THEME_COLOR_INHERIT,
+  THEME_COLOR_PREVIEW,
+  THEME_COLORS,
+  type FolderThemeColor,
+  type ThemeColor,
+} from "@/lib/theme-presets"
 import { SidebarConversationCard } from "./sidebar-conversation-card"
 import { ConversationManageDialog } from "./conversation-manage-dialog"
 import { CloneDialog } from "@/components/layout/clone-dialog"
@@ -114,29 +122,31 @@ function compareByCreatedAtDesc(
   return right.id - left.id
 }
 
-// Sentinel stored in the DB that resolves to the current sidebar foreground
-// color — the swatch then always reads as the folder name does, across themes.
-const FOREGROUND_SWATCH = "foreground"
+const THEME_COLOR_SET = new Set<string>(THEME_COLORS)
 
-// Kept in sync with Rust-side `FOLDER_COLOR_PALETTE` in
-// `src-tauri/src/db/service/folder_service.rs`. Nine well-separated hues
-// spanning the color wheel (skipping the blue band that reads as muddy),
-// plus a theme-aware neutral that tracks the sidebar text color.
-const FOLDER_SWATCH_PALETTE = [
-  "#ef4444", // red
-  "#f97316", // orange
-  "#eab308", // yellow
-  "#84cc16", // lime
-  "#22c55e", // green
-  "#06b6d4", // cyan
-  "#8b5cf6", // violet
-  "#d946ef", // fuchsia
-  "#ec4899", // pink
-  FOREGROUND_SWATCH,
-] as const
+const LEGACY_FOLDER_COLOR_MAP: Record<string, FolderThemeColor> = {
+  foreground: FOLDER_THEME_COLOR_INHERIT,
+  "#ef4444": "red",
+  "#f97316": "orange",
+  "#eab308": "yellow",
+  "#84cc16": "green",
+  "#22c55e": "green",
+  "#06b6d4": "blue",
+  "#8b5cf6": "violet",
+  "#d946ef": "rose",
+  "#ec4899": "rose",
+}
 
-function resolveSwatchColor(swatch: string): string {
-  return swatch === FOREGROUND_SWATCH ? "var(--sidebar-foreground)" : swatch
+function normalizeFolderThemeColor(
+  color: string | null | undefined
+): FolderThemeColor {
+  if (!color) return FOLDER_THEME_COLOR_INHERIT
+  const normalized = color.toLowerCase()
+  if (normalized === FOLDER_THEME_COLOR_INHERIT) {
+    return FOLDER_THEME_COLOR_INHERIT
+  }
+  if (THEME_COLOR_SET.has(normalized)) return normalized as ThemeColor
+  return LEGACY_FOLDER_COLOR_MAP[normalized] ?? FOLDER_THEME_COLOR_INHERIT
 }
 
 function formatRelative(iso: string): string {
@@ -163,7 +173,8 @@ const FolderHeader = memo(function FolderHeader({
   count,
   expanded,
   importing,
-  color,
+  themeColor,
+  appThemeColor,
   onToggle,
   onRemoveFromWorkspace,
   onNewConversation,
@@ -182,13 +193,14 @@ const FolderHeader = memo(function FolderHeader({
   count: number
   expanded: boolean
   importing: boolean
-  color: string
+  themeColor: FolderThemeColor
+  appThemeColor: ThemeColor
   onToggle: (folderId: number) => void
   onRemoveFromWorkspace: (folderId: number) => void
   onNewConversation: (folderId: number) => void
   onImport: (folderId: number) => void
   onManageConversations: (folderId: number) => void
-  onChangeColor: (folderId: number, color: string) => void
+  onChangeColor: (folderId: number, color: FolderThemeColor) => void
   onOpenInSystemExplorer: (folderId: number) => void
   onOpenInTerminal: (folderId: number) => void
   isDragging?: boolean
@@ -246,26 +258,21 @@ const FolderHeader = memo(function FolderHeader({
                 style={{
                   top: "50%",
                   left: "var(--conv-rail-axis)",
-                  width: "0.75rem",
-                  height: "0.75rem",
+                  width: "0.875rem",
+                  height: "0.875rem",
                   transform: "translate(-50%, -50%)",
                 }}
               >
                 {expanded ? (
-                  <ChevronDown className="h-[0.6875rem] w-[0.6875rem]" />
+                  <FolderOpen className="h-[0.875rem] w-[0.875rem]" />
                 ) : (
-                  <ChevronRight className="h-[0.6875rem] w-[0.6875rem]" />
+                  <Folder className="h-[0.875rem] w-[0.875rem]" />
                 )}
               </span>
               <div className="flex min-w-0 flex-1 items-center gap-[0.5rem]">
                 <span
-                  aria-hidden
-                  className="inline-block h-[0.5rem] w-[0.5rem] shrink-0 rounded-[0.125rem]"
-                  style={{ backgroundColor: resolveSwatchColor(color) }}
-                />
-                <span
                   className={cn(
-                    "min-w-0 flex-shrink truncate text-left text-[0.875rem] font-semibold tracking-[-0.00625rem]"
+                    "min-w-0 flex-shrink truncate text-left text-[0.875rem] font-normal text-sidebar-foreground/75"
                   )}
                 >
                   {folderName}
@@ -275,7 +282,7 @@ const FolderHeader = memo(function FolderHeader({
                     "inline-flex shrink-0 items-center justify-center",
                     "h-[0.9375rem] min-w-[1rem] rounded-[0.3125rem] px-[0.25rem]",
                     "text-[0.625rem] font-semibold leading-none tabular-nums",
-                    "bg-[color-mix(in_oklab,var(--sidebar-accent),var(--sidebar-foreground)_6%)] text-muted-foreground/80"
+                    "bg-primary/10 text-primary"
                   )}
                 >
                   {count}
@@ -341,24 +348,43 @@ const FolderHeader = memo(function FolderHeader({
             <Palette className="h-4 w-4" />
             {t("folderHeaderMenu.changeColor")}
           </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="min-w-[9rem] p-2">
-            <div className="grid grid-cols-10 gap-1">
-              {FOLDER_SWATCH_PALETTE.map((swatch) => {
-                const active = swatch.toLowerCase() === color.toLowerCase()
+          <ContextMenuSubContent className="min-w-[12rem] p-2">
+            <ContextMenuItem
+              onSelect={() =>
+                onChangeColor(folderId, FOLDER_THEME_COLOR_INHERIT)
+              }
+              className="gap-2"
+            >
+              <span
+                aria-hidden
+                className="h-[1.125rem] w-[1.125rem] shrink-0 rounded-[0.25rem] border border-border"
+                style={{ backgroundColor: THEME_COLOR_PREVIEW[appThemeColor] }}
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {t("folderHeaderMenu.useThemeColor")}
+              </span>
+              {themeColor === FOLDER_THEME_COLOR_INHERIT ? (
+                <Check className="h-3.5 w-3.5 shrink-0" />
+              ) : null}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <div className="grid grid-cols-6 gap-1">
+              {THEME_COLORS.map((color) => {
+                const active = color === themeColor
                 return (
                   <button
-                    key={swatch}
+                    key={color}
                     type="button"
-                    title={swatch}
-                    aria-label={swatch}
-                    onClick={() => onChangeColor(folderId, swatch)}
+                    title={color}
+                    aria-label={color}
+                    onClick={() => onChangeColor(folderId, color)}
                     className={cn(
                       "h-[1.125rem] w-[1.125rem] cursor-pointer rounded-[0.25rem]",
                       "outline-none ring-offset-1 ring-offset-popover",
                       "transition-[box-shadow,transform] duration-100 hover:scale-110",
                       active && "ring-2 ring-foreground/60"
                     )}
-                    style={{ backgroundColor: resolveSwatchColor(swatch) }}
+                    style={{ backgroundColor: THEME_COLOR_PREVIEW[color] }}
                   />
                 )
               })}
@@ -391,13 +417,15 @@ interface FolderGroupItemProps {
   sortMode: SidebarSortMode
   selectedConversation: { id: number; agentType: string } | null
   openTabKeys: Set<string>
-  color: string
+  themeColor: FolderThemeColor
+  appThemeColor: ThemeColor
+  darkMode: boolean
   onToggle: (folderId: number) => void
   onRemoveFromWorkspace: (folderId: number) => void
   onNewConversationForFolder: (folderId: number) => void
   onImport: (folderId: number) => void
   onManageConversations: (folderId: number) => void
-  onChangeColor: (folderId: number, color: string) => void
+  onChangeColor: (folderId: number, color: FolderThemeColor) => void
   onOpenInSystemExplorer: (folderId: number) => void
   onOpenInTerminal: (folderId: number) => void
   onSelect: (id: number, agentType: string) => void
@@ -427,7 +455,9 @@ function FolderGroupItem({
   sortMode,
   selectedConversation,
   openTabKeys,
-  color,
+  themeColor,
+  appThemeColor,
+  darkMode,
   onToggle,
   onRemoveFromWorkspace,
   onNewConversationForFolder,
@@ -473,7 +503,13 @@ function FolderGroupItem({
   // headers always paint above later folders' conversation rows when scrolled.
   return (
     <div
-      className="relative"
+      className={cn(
+        "relative",
+        darkMode && themeColor !== FOLDER_THEME_COLOR_INHERIT && "dark"
+      )}
+      data-theme={
+        themeColor === FOLDER_THEME_COLOR_INHERIT ? undefined : themeColor
+      }
       style={{
         isolation: "isolate",
         zIndex: dragging ? DRAGGING_Z_INDEX : stackIndex,
@@ -503,7 +539,8 @@ function FolderGroupItem({
             count={conversations.length}
             expanded={expanded}
             importing={importing}
-            color={color}
+            themeColor={themeColor}
+            appThemeColor={appThemeColor}
             onToggle={handleToggle}
             onRemoveFromWorkspace={onRemoveFromWorkspace}
             onNewConversation={onNewConversationForFolder}
@@ -578,6 +615,8 @@ export function SidebarConversationList({
   const tCommon = useTranslations("Folder.common")
   const tFolderDropdown = useTranslations("Folder.folderNameDropdown")
   const tFileTree = useTranslations("Folder.fileTreeTab")
+  const { resolvedTheme } = useTheme()
+  const { themeColor: appThemeColor } = useThemeColor()
   const { createTerminalInDirectory } = useTerminalContext()
   useZoomLevel()
   const {
@@ -658,7 +697,7 @@ export function SidebarConversationList({
   }, [])
 
   const handleChangeFolderColor = useCallback(
-    async (folderId: number, color: string) => {
+    async (folderId: number, color: FolderThemeColor) => {
       try {
         await updateFolderColor(folderId, color)
         await refreshFolder(folderId)
@@ -1105,7 +1144,7 @@ export function SidebarConversationList({
               <ScrollArea
                 ref={scrollRootRef}
                 className={cn(
-                  "h-full min-h-0 px-1 pb-[1.25rem]",
+                  "h-full min-h-0 px-1.5 pb-1.5",
                   "[overflow-anchor:none]"
                 )}
               >
@@ -1123,6 +1162,9 @@ export function SidebarConversationList({
                 >
                   {orderedFolderIds.map((folderId, index) => {
                     const folderEntry = folderIndex.get(folderId)
+                    const themeColor = normalizeFolderThemeColor(
+                      folderEntry?.color
+                    )
                     const folderName = folderEntry?.name ?? String(folderId)
                     const folderPath = folderEntry?.path ?? ""
                     const convs = byFolder.get(folderId) ?? []
@@ -1153,7 +1195,9 @@ export function SidebarConversationList({
                         sortMode={sortMode}
                         selectedConversation={selectedConversation}
                         openTabKeys={openTabKeys}
-                        color={folderEntry?.color ?? "#22c55e"}
+                        themeColor={themeColor}
+                        appThemeColor={appThemeColor}
+                        darkMode={resolvedTheme === "dark"}
                         onToggle={toggleFolder}
                         onRemoveFromWorkspace={handleRemoveFolder}
                         onNewConversationForFolder={
